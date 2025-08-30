@@ -594,10 +594,81 @@ const HelpMeLearn = ({ section }) => {
           ]
         }
       ]
+    },
+    wildcardSubdomainEnumeration: {
+      title: "Help Me Learn!",
+      items: [
+        {
+          question: "What is the comprehensive approach to wildcard subdomain enumeration?",
+          answers: [
+            "Wildcard subdomain enumeration uses multiple specialized tools (Subfinder, Amass Enum, DNSx) to discover all subdomains associated with a target domain through passive reconnaissance, active DNS queries, and comprehensive data source integration.",
+            "This approach maximizes discovery coverage by leveraging different tool capabilities: Subfinder for fast passive discovery, Amass for comprehensive OSINT enumeration, and DNSx for DNS record analysis and validation.",
+            "The systematic approach ensures no subdomain is missed by combining passive data sources, certificate transparency logs, DNS brute-forcing, and advanced enumeration techniques across multiple discovery vectors."
+          ]
+        }
+      ]
+    },
+    wildcardLiveWebServers: {
+      title: "Help Me Learn!",
+      items: [
+        {
+          question: "How does HTTPX efficiently discover live web servers from enumerated subdomains?",
+          answers: [
+            "HTTPX systematically probes all discovered subdomains to identify which ones host active web services, providing essential information about technology stacks, response codes, and service characteristics.",
+            "The tool performs fast HTTP/HTTPS probing with support for custom headers, timeouts, and concurrent requests to efficiently validate large lists of subdomains while gathering detailed response metadata.",
+            "Live web server discovery transforms raw subdomain lists into actionable targets by identifying actual services, extracting technology information, and providing the foundation for subsequent vulnerability assessment activities."
+          ]
+        }
+      ]
+    },
+    wildcardNucleiVulnerabilityScanning: {
+      title: "Help Me Learn!",
+      items: [
+        {
+          question: "How does Nuclei provide comprehensive vulnerability scanning for wildcard targets?",
+          answers: [
+            "Nuclei uses community-driven templates to scan discovered live web servers for a wide range of vulnerabilities, misconfigurations, and security issues across different technologies and services.",
+            "The scanner supports custom template selection, severity-based filtering, and concurrent scanning to efficiently assess large numbers of targets while providing detailed vulnerability findings with impact analysis.",
+            "Integration with wildcard discovery workflow enables automated scanning of newly discovered assets, ensuring comprehensive security assessment of the entire attack surface revealed through subdomain enumeration."
+          ]
+        }
+      ]
+    },
+    wildcardAcunetixIntegration: {
+      title: "Help Me Learn!",
+      items: [
+        {
+          question: "How does Acunetix integration enhance wildcard target assessment?",
+          answers: [
+            "Acunetix integration provides professional-grade Dynamic Application Security Testing (DAST) capabilities for discovered live web servers, enabling comprehensive web application vulnerability assessment beyond basic reconnaissance.",
+            "The integration supports automated target import, scan configuration, and result management through API connectivity, allowing seamless transition from reconnaissance to deep vulnerability assessment.",
+            "Advanced features include scan queue management, vulnerability correlation, detailed reporting, and integration with security workflows to provide enterprise-level security testing capabilities for bug bounty hunting."
+          ]
+        }
+      ]
+    },
+    wildcardAttackSurfaceSummary: {
+      title: "Help Me Learn!",
+      items: [
+        {
+          question: "How does the attack surface summary provide actionable intelligence?",
+          answers: [
+            "The attack surface summary consolidates all discovery and assessment results into a comprehensive overview showing total subdomains, live web servers, vulnerability findings, and scan coverage for strategic decision-making.",
+            "Visualization and export capabilities enable effective communication of findings, prioritization of high-value targets, and integration with other security tools and workflows for comprehensive security assessment.",
+            "The summary provides the foundation for systematic exploitation attempts by highlighting the most promising targets based on discovery results, vulnerability findings, and potential business impact for successful bug bounty submissions."
+          ]
+        }
+      ]
     }
   };
 
   const currentSection = sections[section];
+
+  // If section doesn't exist, return null to avoid errors
+  if (!currentSection) {
+    console.warn(`HelpMeLearn: Section "${section}" not found. Available sections:`, Object.keys(sections));
+    return null;
+  }
 
   return (
     <>
