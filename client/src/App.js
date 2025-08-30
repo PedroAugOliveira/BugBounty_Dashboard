@@ -5780,17 +5780,126 @@ function App() {
             )}
             {activeTarget.type === 'Wildcard' && (
               <div className="mb-4">
-                <h3 className="text-danger mb-3">Wildcard Attack Surface Discovery</h3>
-                
-                {/* Subdomain Enumeration Section */}
-                <h4 className="text-secondary mb-3 fs-5">Subdomain Enumeration</h4>
-                <HelpMeLearn section="wildcardSubdomainEnumeration" />
-                <Row className="row-cols-3 g-3 mb-4">
+                <h3 className="text-danger mb-3">Wildcard</h3>
+                <HelpMeLearn section="amass" />
+                <Row className="mb-4">
+                  <Col>
+                    <Card className="shadow-sm" style={{ minHeight: '250px' }}>
+                      <Card.Body className="d-flex flex-column justify-content-between">
+                        <div>
+                          <Card.Title className="text-danger fs-3 mb-3 text-center">
+                            <a href="https://github.com/OWASP/Amass" className="text-danger text-decoration-none">
+                              Amass Enum
+                            </a>
+                          </Card.Title>
+                          <Card.Text className="text-white small fst-italic text-center">
+                            A powerful subdomain enumeration and OSINT tool for in-depth reconnaissance.
+                          </Card.Text>
+                          <Card.Text className="text-white small d-flex justify-content-between">
+                            <span>Last Scanned: &nbsp;&nbsp;{getLastScanDate(amassScans)}</span>
+                            <span>Total Results: {getResultLength(scanHistory[scanHistory.length - 1]) || "N/a"}</span>
+                          </Card.Text>
+                          <Card.Text className="text-white small d-flex justify-content-between">
+                            <span>Last Scan Status: &nbsp;&nbsp;{getLatestScanStatus(amassScans)}</span>
+                            <span>Cloud Domains: {cloudDomains.length || "0"}</span>
+                          </Card.Text>
+                          <Card.Text className="text-white small d-flex justify-content-between">
+                            <span>Scan Time: &nbsp;&nbsp;{getExecutionTime(getLatestScanTime(amassScans))}</span>
+                            <span>Subdomains: {subdomains.length || "0"}</span>
+                          </Card.Text>
+                          <Card.Text className="text-white small d-flex justify-content-between mb-3">
+                            <span>Scan ID: {renderScanId(getLatestScanId(amassScans))}</span>
+                            <span>DNS Records: {dnsRecords.length}</span>
+                          </Card.Text>
+                        </div>
+                        <div className="d-flex justify-content-between w-100 mt-3 gap-2">
+                          <Button variant="outline-danger" className="flex-fill" onClick={handleOpenScanHistoryModal}>&nbsp;&nbsp;&nbsp;Scan History&nbsp;&nbsp;&nbsp;</Button>
+                          <Button variant="outline-danger" className="flex-fill" onClick={handleOpenRawResultsModal}>&nbsp;&nbsp;&nbsp;Raw Results&nbsp;&nbsp;&nbsp;</Button>
+                          <Button variant="outline-danger" className="flex-fill" onClick={handleOpenInfraModal}>Infrastructure</Button>
+                          <Button variant="outline-danger" className="flex-fill" onClick={handleOpenDNSRecordsModal}>&nbsp;&nbsp;&nbsp;DNS Records&nbsp;&nbsp;&nbsp;</Button>
+                          <Button variant="outline-danger" className="flex-fill" onClick={handleOpenSubdomainsModal}>&nbsp;&nbsp;&nbsp;Subdomains&nbsp;&nbsp;&nbsp;</Button>
+                          <Button variant="outline-danger" className="flex-fill" onClick={handleOpenCloudDomainsModal}>&nbsp;&nbsp;Cloud Domains&nbsp;&nbsp;</Button>
+                          <Button
+                            variant="outline-danger"
+                            className="flex-fill"
+                            onClick={startAmassScan}
+                            disabled={isScanning || mostRecentAmassScanStatus === "pending" ? true : false}
+                          >
+                            <div className="btn-content">
+                              {isScanning || mostRecentAmassScanStatus === "pending" ? (
+                                <div className="spinner"></div>
+                              ) : 'Scan'}
+                            </div>
+                          </Button>
+                        </div>
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                </Row>
+                <h4 className="text-secondary mb-3 fs-5">Subdomain Scraping</h4>
+                <HelpMeLearn section="subdomainScraping" />
+                <Row className="row-cols-5 g-3 mb-4">
                   {[
-                    {
-                      name: 'Subfinder',
+                    { name: 'Sublist3r', 
+                      link: 'https://github.com/huntergregal/Sublist3r',
+                      isActive: true,
+                      status: mostRecentSublist3rScanStatus,
+                      isScanning: isSublist3rScanning,
+                      onScan: startSublist3rScan,
+                      onResults: handleOpenSublist3rResultsModal,
+                      resultCount: mostRecentSublist3rScan && mostRecentSublist3rScan.result ? 
+                        mostRecentSublist3rScan.result.split('\n').filter(line => line.trim()).length : 0
+                    },
+                    { name: 'Assetfinder', 
+                      link: 'https://github.com/tomnomnom/assetfinder',
+                      isActive: true,
+                      status: mostRecentAssetfinderScanStatus,
+                      isScanning: isAssetfinderScanning,
+                      onScan: startAssetfinderScan,
+                      onResults: handleOpenAssetfinderResultsModal,
+                      resultCount: mostRecentAssetfinderScan && mostRecentAssetfinderScan.result ? 
+                        mostRecentAssetfinderScan.result.split('\n').filter(line => line.trim()).length : 0
+                    },
+                    { 
+                      name: 'GAU', 
+                      link: 'https://github.com/lc/gau',
+                      isActive: true,
+                      status: mostRecentGauScanStatus,
+                      isScanning: isGauScanning,
+                      onScan: startGauScan,
+                      onResults: handleOpenGauResultsModal,
+                      resultCount: mostRecentGauScan && mostRecentGauScan.result ? 
+                        (() => {
+                          try {
+                            const results = mostRecentGauScan.result.split('\n')
+                              .filter(line => line.trim())
+                              .map(line => JSON.parse(line));
+                            const subdomainSet = new Set();
+                            results.forEach(result => {
+                              try {
+                                const url = new URL(result.url);
+                                subdomainSet.add(url.hostname);
+                              } catch (e) {}
+                            });
+                            return subdomainSet.size;
+                          } catch (e) {
+                            return 0;
+                          }
+                        })() : 0
+                    },
+                    { 
+                      name: 'CTL', 
+                      link: 'https://github.com/hannob/tlshelpers',
+                      isActive: true,
+                      status: mostRecentCTLScanStatus,
+                      isScanning: isCTLScanning,
+                      onScan: startCTLScan,
+                      onResults: handleOpenCTLResultsModal,
+                      resultCount: mostRecentCTLScan && mostRecentCTLScan.result ? 
+                        mostRecentCTLScan.result.split('\n').filter(line => line.trim()).length : 0
+                    },
+                    { name: 'Subfinder', 
                       link: 'https://github.com/projectdiscovery/subfinder',
-                      description: 'Fast subdomain discovery tool with passive online sources.',
                       isActive: true,
                       status: mostRecentSubfinderScanStatus,
                       isScanning: isSubfinderScanning,
@@ -5798,30 +5907,6 @@ function App() {
                       onResults: handleOpenSubfinderResultsModal,
                       resultCount: mostRecentSubfinderScan && mostRecentSubfinderScan.result ? 
                         mostRecentSubfinderScan.result.split('\n').filter(line => line.trim()).length : 0
-                    },
-                    {
-                      name: 'Amass Enum',
-                      link: 'https://github.com/OWASP/Amass',
-                      description: 'Advanced DNS enumeration and subdomain discovery.',
-                      isActive: true,
-                      status: mostRecentAmassEnumScanStatus,
-                      isScanning: isAmassEnumScanning,
-                      onScan: startAmassEnumScan,
-                      onResults: handleOpenAmassEnumResultsModal,
-                      resultCount: mostRecentAmassEnumScan && mostRecentAmassEnumScan.result ? 
-                        mostRecentAmassEnumScan.result.split('\n').filter(line => line.trim()).length : 0
-                    },
-                    {
-                      name: 'DNSx',
-                      link: 'https://github.com/projectdiscovery/dnsx',
-                      description: 'Fast and multi-purpose DNS toolkit for DNS record discovery.',
-                      isActive: true,
-                      status: mostRecentDNSxScanStatus,
-                      isScanning: isDNSxScanning,
-                      onScan: startDNSxScan,
-                      onResults: handleOpenDNSxResultsModal,
-                      resultCount: mostRecentDNSxScan && mostRecentDNSxScan.result ? 
-                        mostRecentDNSxScan.result.split('\n').filter(line => line.trim()).length : 0
                     }
                   ].map((tool, index) => (
                     <Col key={index}>
@@ -5833,33 +5918,41 @@ function App() {
                             </a>
                           </Card.Title>
                           <Card.Text className="text-white small fst-italic">
-                            {tool.description}
+                            {tool.name === 'GAU' ? 'Get All URLs - Fetch known URLs from AlienVault\'s Open Threat Exchange, the Wayback Machine, and Common Crawl.' : 'A subdomain enumeration tool that uses OSINT techniques.'}
                           </Card.Text>
                           <div className="mt-auto">
                             <Card.Text className="text-white small mb-3">
                               Subdomains: {tool.resultCount || "0"}
                             </Card.Text>
                             <div className="d-flex justify-content-between gap-2">
-                              <Button 
-                                variant="outline-danger" 
-                                className="flex-fill"
-                                onClick={tool.onScan}
-                                disabled={tool.isScanning || tool.status === "pending"}
-                              >
-                                <div className="btn-content">
-                                  {tool.isScanning || tool.status === "pending" ? (
-                                    <div className="spinner"></div>
-                                  ) : 'Scan'}
-                                </div>
-                              </Button>
-                              <Button 
-                                variant="outline-danger" 
-                                className="flex-fill" 
-                                onClick={tool.onResults}
-                                disabled={!tool.resultCount}
-                              >
-                                Results
-                              </Button>
+                              {tool.isActive ? (
+                                <>
+                                  <Button 
+                                    variant="outline-danger" 
+                                    className="flex-fill" 
+                                    onClick={tool.onResults}
+                                  >
+                                    Results
+                                  </Button>
+                                  <Button
+                                    variant="outline-danger"
+                                    className="flex-fill"
+                                    onClick={tool.onScan}
+                                    disabled={tool.isScanning || tool.status === "pending"}
+                                  >
+                                    <div className="btn-content">
+                                      {tool.isScanning || tool.status === "pending" ? (
+                                        <div className="spinner"></div>
+                                      ) : 'Scan'}
+                                    </div>
+                                  </Button>
+                                </>
+                              ) : (
+                                <>
+                                  <Button variant="outline-danger" className="flex-fill" disabled>Results</Button>
+                                  <Button variant="outline-danger" className="flex-fill" disabled>Scan</Button>
+                                </>
+                              )}
                             </div>
                           </div>
                         </Card.Body>
@@ -5867,27 +5960,21 @@ function App() {
                     </Col>
                   ))}
                 </Row>
-
-                {/* Live Web Server Discovery Section */}
-                <h4 className="text-secondary mb-3 fs-5">Live Web Server Discovery</h4>
-                <HelpMeLearn section="wildcardLiveWebServers" />
+                <h4 className="text-secondary mb-3 fs-5">Consolidate Subdomains & Discover Live Web Servers - Round 1</h4>
+                <HelpMeLearn section="consolidationRound1" />
                 <Row className="mb-4">
                   <Col>
                     <Card className="shadow-sm h-100 text-center" style={{ minHeight: '200px' }}>
                       <Card.Body className="d-flex flex-column">
-                        <Card.Title className="text-danger fs-4 mb-3">
-                          <a href="https://github.com/projectdiscovery/httpx" className="text-danger text-decoration-none">
-                            HTTPX - Live Web Server Discovery
-                          </a>
-                        </Card.Title>
+                        <Card.Title className="text-danger fs-4 mb-3">Consolidate Subdomains & Discover Live Web Servers</Card.Title>
                         <Card.Text className="text-white small fst-italic mb-4">
-                          Fast and multi-purpose HTTP toolkit for discovering live web servers and services from enumerated subdomains.
+                          Each tool has discovered a list of subdomains. Review the results, consolidate them into a single list, and discover live web servers.
                         </Card.Text>
                         <div className="text-danger mb-4">
                           <div className="row">
                             <div className="col">
                               <h3 className="mb-0">{consolidatedCount}</h3>
-                              <small className="text-white-50">Total Subdomains</small>
+                              <small className="text-white-50">Unique Subdomains</small>
                             </div>
                             <div className="col">
                               <h3 className="mb-0">{getHttpxResultsCount(mostRecentHttpxScan)}</h3>
@@ -5908,6 +5995,14 @@ function App() {
                               ) : 'Consolidate'}
                             </div>
                           </Button>
+                          <Button 
+                            variant="outline-danger" 
+                            className="flex-fill"
+                            onClick={handleOpenUniqueSubdomainsModal}
+                            disabled={consolidatedSubdomains.length === 0}
+                          >
+                            Unique Subdomains
+                          </Button>
                           <Button
                             variant="outline-danger"
                             className="flex-fill"
@@ -5917,17 +6012,274 @@ function App() {
                             <div className="btn-content">
                               {isHttpxScanning || mostRecentHttpxScanStatus === "pending" ? (
                                 <div className="spinner"></div>
-                              ) : 'Discover Live Servers'}
+                              ) : 'HTTPX Scan'}
+                            </div>
+                          </Button>
+                          <Button variant="outline-danger" className="flex-fill" onClick={handleOpenHttpxResultsModal}>Live Web Servers</Button>
+                        </div>
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                </Row>
+                <h4 className="text-secondary mb-3 fs-5">Brute-Force</h4>
+                <HelpMeLearn section="bruteForce" />
+                <Row className="justify-content-between mb-4">
+                  {[
+                    { 
+                      name: 'ShuffleDNS', 
+                      link: 'https://github.com/projectdiscovery/shuffledns',
+                      isActive: true,
+                      status: mostRecentShuffleDNSScanStatus,
+                      isScanning: isShuffleDNSScanning,
+                      onScan: startShuffleDNSScan,
+                      onResults: handleOpenShuffleDNSResultsModal,
+                      resultCount: mostRecentShuffleDNSScan && mostRecentShuffleDNSScan.result ? 
+                        mostRecentShuffleDNSScan.result.split('\n').filter(line => line.trim()).length : 0
+                    },
+                    { 
+                      name: 'CeWL', 
+                      link: 'https://github.com/digininja/CeWL',
+                      isActive: true,
+                      status: mostRecentCeWLScanStatus,
+                      isScanning: isCeWLScanning,
+                      onScan: startCeWLScan,
+                      onResults: handleOpenCeWLResultsModal,
+                      resultCount: mostRecentShuffleDNSCustomScan && mostRecentShuffleDNSCustomScan.result ? 
+                        mostRecentShuffleDNSCustomScan.result.split('\n').filter(line => line.trim()).length : 0
+                    }
+                  ].map((tool, index) => (
+                    <Col md={6} className="mb-4" key={index}>
+                      <Card className="shadow-sm h-100 text-center" style={{ minHeight: '150px' }}>
+                        <Card.Body className="d-flex flex-column">
+                          <Card.Title className="text-danger mb-3">
+                            <a href={tool.link} className="text-danger text-decoration-none">
+                              {tool.name}
+                            </a>
+                          </Card.Title>
+                          <Card.Text className="text-white small fst-italic">
+                            {tool.name === 'ShuffleDNS' ? 
+                              'A subdomain resolver tool that utilizes massdns for resolving subdomains.' :
+                              'A custom word list generator for target-specific wordlists.'}
+                          </Card.Text>
+                          {tool.isActive && (
+                            <Card.Text className="text-white small mb-3">
+                              Subdomains: {tool.resultCount || "0"}
+                            </Card.Text>
+                          )}
+                          <div className="d-flex justify-content-between mt-auto gap-2">
+                            <Button 
+                              variant="outline-danger" 
+                              className="flex-fill"
+                              onClick={tool.onResults}
+                              disabled={!tool.isActive || !tool.resultCount}
+                            >
+                              Results
+                            </Button>
+                            <Button
+                              variant="outline-danger"
+                              className="flex-fill"
+                              onClick={tool.onScan}
+                              disabled={!tool.isActive || tool.isScanning || tool.status === "pending"}
+                            >
+                              <div className="btn-content">
+                                {tool.isScanning || tool.status === "pending" ? (
+                                  <div className="spinner"></div>
+                                ) : 'Scan'}
+                              </div>
+                            </Button>
+                          </div>
+                        </Card.Body>
+                      </Card>
+                    </Col>
+                  ))}
+                </Row>
+                <h4 className="text-secondary mb-3 fs-5">Consolidate Subdomains & Discover Live Web Servers - Round 2</h4>
+                <HelpMeLearn section="consolidationRound2" />
+                <Row className="mb-4">
+                  <Col>
+                    <Card className="shadow-sm h-100 text-center" style={{ minHeight: '200px' }}>
+                      <Card.Body className="d-flex flex-column">
+                        <Card.Title className="text-danger fs-4 mb-3">Consolidate Subdomains & Discover Live Web Servers</Card.Title>
+                        <Card.Text className="text-white small fst-italic mb-4">
+                          Each tool has discovered a list of subdomains. Review the results, consolidate them into a single list, and discover live web servers.
+                        </Card.Text>
+                        <div className="text-danger mb-4">
+                          <div className="row">
+                            <div className="col">
+                              <h3 className="mb-0">{consolidatedCount}</h3>
+                              <small className="text-white-50">Unique Subdomains</small>
+                            </div>
+                            <div className="col">
+                              <h3 className="mb-0">{getHttpxResultsCount(mostRecentHttpxScan)}</h3>
+                              <small className="text-white-50">Live Web Servers</small>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="d-flex justify-content-between mt-auto gap-2">
+                          <Button 
+                            variant="outline-danger" 
+                            className="flex-fill" 
+                            onClick={handleConsolidate}
+                            disabled={isConsolidating}
+                          >
+                            <div className="btn-content">
+                              {isConsolidating ? (
+                                <div className="spinner"></div>
+                              ) : 'Consolidate'}
                             </div>
                           </Button>
                           <Button 
                             variant="outline-danger" 
-                            className="flex-fill" 
-                            onClick={handleOpenHttpxResultsModal}
-                            disabled={!mostRecentHttpxScan}
+                            className="flex-fill"
+                            onClick={handleOpenUniqueSubdomainsModal}
+                            disabled={consolidatedSubdomains.length === 0}
                           >
-                            View Results
+                            Unique Subdomains
                           </Button>
+                          <Button
+                            variant="outline-danger"
+                            className="flex-fill"
+                            onClick={startHttpxScan}
+                            disabled={isHttpxScanning || mostRecentHttpxScanStatus === "pending" || consolidatedSubdomains.length === 0}
+                          >
+                            <div className="btn-content">
+                              {isHttpxScanning || mostRecentHttpxScanStatus === "pending" ? (
+                                <div className="spinner"></div>
+                              ) : 'HTTPX Scan'}
+                            </div>
+                          </Button>
+                          <Button variant="outline-danger" className="flex-fill" onClick={handleOpenHttpxResultsModal}>Live Web Servers</Button>
+                        </div>
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                </Row>
+                <h4 className="text-secondary mb-3 fs-5">JavaScript/Link Discovery</h4>
+                <HelpMeLearn section="javascriptDiscovery" />
+                <Row className="justify-content-between mb-4">
+                  {[
+                    { 
+                      name: 'GoSpider', 
+                      link: 'https://github.com/jaeles-project/gospider',
+                      isActive: true,
+                      status: mostRecentGoSpiderScanStatus,
+                      isScanning: isGoSpiderScanning,
+                      onScan: startGoSpiderScan,
+                      onResults: handleOpenGoSpiderResultsModal,
+                      resultCount: mostRecentGoSpiderScan && mostRecentGoSpiderScan.result ? 
+                        mostRecentGoSpiderScan.result.split('\n').filter(line => line.trim()).length : 0
+                    },
+                    { 
+                      name: 'Subdomainizer', 
+                      link: 'https://github.com/nsonaniya2010/SubDomainizer',
+                      isActive: true,
+                      status: mostRecentSubdomainizerScanStatus,
+                      isScanning: isSubdomainizerScanning,
+                      onScan: startSubdomainizerScan,
+                      onResults: handleOpenSubdomainizerResultsModal,
+                      resultCount: mostRecentSubdomainizerScan && mostRecentSubdomainizerScan.result ? 
+                        mostRecentSubdomainizerScan.result.split('\n').filter(line => line.trim()).length : 0
+                    }
+                  ].map((tool, index) => (
+                    <Col md={6} className="mb-4" key={index}>
+                      <Card className="shadow-sm h-100 text-center" style={{ minHeight: '150px' }}>
+                        <Card.Body className="d-flex flex-column">
+                          <Card.Title className="text-danger mb-3">
+                            <a href={tool.link} className="text-danger text-decoration-none">
+                              {tool.name}
+                            </a>
+                          </Card.Title>
+                          <Card.Text className="text-white small fst-italic">
+                            A fast web spider written in Go for web scraping and crawling.
+                          </Card.Text>
+                          {tool.isActive && (
+                            <Card.Text className="text-white small mb-3">
+                              Subdomains: {tool.resultCount || "0"}
+                            </Card.Text>
+                          )}
+                          <div className="d-flex justify-content-between mt-auto gap-2">
+                            <Button 
+                              variant="outline-danger" 
+                              className="flex-fill"
+                              onClick={tool.onResults}
+                              disabled={!tool.isActive || !tool.resultCount}
+                            >
+                              Results
+                            </Button>
+                            <Button
+                              variant="outline-danger"
+                              className="flex-fill"
+                              onClick={tool.onScan}
+                              disabled={!tool.isActive || tool.isScanning || tool.status === "pending"}
+                            >
+                              <div className="btn-content">
+                                {tool.isScanning || tool.status === "pending" ? (
+                                  <div className="spinner"></div>
+                                ) : 'Scan'}
+                              </div>
+                            </Button>
+                          </div>
+                        </Card.Body>
+                      </Card>
+                    </Col>
+                  ))}
+                </Row>
+                <h4 className="text-secondary mb-3 fs-5">Consolidate Subdomains & Discover Live Web Servers - Round 3</h4>
+                <HelpMeLearn section="consolidationRound3" />
+                <Row className="mb-4">
+                  <Col>
+                    <Card className="shadow-sm h-100 text-center" style={{ minHeight: '200px' }}>
+                      <Card.Body className="d-flex flex-column">
+                        <Card.Title className="text-danger fs-4 mb-3">Subdomain Discovery Results</Card.Title>
+                        <Card.Text className="text-white small fst-italic mb-4">
+                          Each tool has discovered additional subdomains through JavaScript analysis and link discovery. Review the results, consolidate them into a single list, and discover live web servers.
+                        </Card.Text>
+                        <div className="text-danger mb-4">
+                          <div className="row">
+                            <div className="col">
+                              <h3 className="mb-0">{consolidatedCount}</h3>
+                              <small className="text-white-50">Unique Subdomains</small>
+                            </div>
+                            <div className="col">
+                              <h3 className="mb-0">{getHttpxResultsCount(mostRecentHttpxScan)}</h3>
+                              <small className="text-white-50">Live Web Servers</small>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="d-flex justify-content-between mt-auto gap-2">
+                          <Button 
+                            variant="outline-danger" 
+                            className="flex-fill" 
+                            onClick={handleConsolidate}
+                            disabled={isConsolidating}
+                          >
+                            <div className="btn-content">
+                              {isConsolidating ? (
+                                <div className="spinner"></div>
+                              ) : 'Consolidate'}
+                            </div>
+                          </Button>
+                          <Button 
+                            variant="outline-danger" 
+                            className="flex-fill"
+                            onClick={handleOpenUniqueSubdomainsModal}
+                            disabled={consolidatedSubdomains.length === 0}
+                          >
+                            Unique Subdomains
+                          </Button>
+                          <Button
+                            variant="outline-danger"
+                            className="flex-fill"
+                            onClick={startHttpxScan}
+                            disabled={isHttpxScanning || mostRecentHttpxScanStatus === "pending" || consolidatedSubdomains.length === 0}
+                          >
+                            <div className="btn-content">
+                              {isHttpxScanning || mostRecentHttpxScanStatus === "pending" ? (
+                                <div className="spinner"></div>
+                              ) : 'HTTPX Scan'}
+                            </div>
+                          </Button>
+                          <Button variant="outline-danger" className="flex-fill" onClick={handleOpenHttpxResultsModal}>Live Web Servers</Button>
                         </div>
                       </Card.Body>
                     </Card>
@@ -6077,66 +6429,109 @@ function App() {
                   </Col>
                 </Row>
 
-                {/* Attack Surface Summary */}
-                <h4 className="text-secondary mb-3 fs-5">Attack Surface Summary</h4>
-                <HelpMeLearn section="wildcardAttackSurfaceSummary" />
+                <h4 className="text-secondary mb-3 fs-3 text-center">DECISION POINT</h4>
+                <HelpMeLearn section="decisionPoint" />
                 <Row className="mb-4">
                   <Col>
-                    <Card className="shadow-sm h-100 text-center" style={{ minHeight: '200px' }}>
-                      <Card.Body className="d-flex flex-column">
-                        <Card.Title className="text-danger fs-4 mb-3">Complete Attack Surface Overview</Card.Title>
-                        <Card.Text className="text-white small fst-italic mb-4">
-                          Comprehensive summary of discovered assets and potential attack vectors for the wildcard target with actionable intelligence.
-                        </Card.Text>
-                        <div className="text-danger mb-4">
-                          <div className="row">
-                            <div className="col">
-                              <h3 className="mb-0">{(() => {
-                                if (!mostRecentSubfinderScan?.result && !mostRecentAmassEnumScan?.result) return 0;
-                                const subfinderCount = mostRecentSubfinderScan?.result ? 
-                                  mostRecentSubfinderScan.result.split('\n').filter(line => line.trim()).length : 0;
-                                const amassCount = mostRecentAmassEnumScan?.result ? 
-                                  mostRecentAmassEnumScan.result.split('\n').filter(line => line.trim()).length : 0;
-                                return Math.max(subfinderCount, amassCount);
-                              })()}</h3>
-                              <small className="text-white-50">Total Subdomains</small>
+                    <Card className="shadow-sm" style={{ minHeight: '250px' }}>
+                      <Card.Body className="d-flex flex-column justify-content-between text-center">
+                        <div>
+                          <Card.Title className="text-danger fs-3 mb-3">Add URL Scope Target</Card.Title>
+                          <Card.Text className="text-white small fst-italic">
+                            We now have a list of unique subdomains pointing to live web servers. The next step is to take screenshots of each web application and gather data to identify the target that will give us the greatest ROI as a bug bounty hunter. Focus on signs that the target may have vulnerabilities, may not be maintained, or offers a large attack surface.
+                          </Card.Text>
+                          <div className="d-flex justify-content-around mt-4 mb-4">
+                            <div className="text-center px-4">
+                              <div className="digital-clock text-danger fw-bold" style={{
+                                fontFamily: "'Digital-7', monospace",
+                                fontSize: "2.5rem",
+                                textShadow: "0 0 10px rgba(255, 0, 0, 0.5)",
+                                letterSpacing: "2px"
+                              }}>
+                                {mostRecentNucleiScreenshotScan ? 
+                                  Math.floor((new Date() - new Date(mostRecentNucleiScreenshotScan.created_at)) / (1000 * 60 * 60 * 24)) : 
+                                  '∞'}
+                              </div>
+                              <div className="text-white small mt-2">day{mostRecentNucleiScreenshotScan && 
+                                Math.floor((new Date() - new Date(mostRecentNucleiScreenshotScan.created_at)) / (1000 * 60 * 60 * 24)) !== 1 ? 's' : ''} since last Screenshots</div>
                             </div>
-                            <div className="col">
-                              <h3 className="mb-0">{getHttpxResultsCount(mostRecentHttpxScan)}</h3>
-                              <small className="text-white-50">Live Web Servers</small>
-                            </div>
-                            <div className="col">
-                              <h3 className="mb-0">{getNucleiTotalFindings() || "0"}</h3>
-                              <small className="text-white-50">Nuclei Findings</small>
-                            </div>
-                            <div className="col">
-                              <h3 className="mb-0">0</h3>
-                              <small className="text-white-50">Acunetix Scans</small>
+                            <div className="text-center px-4">
+                              <div className="digital-clock text-danger fw-bold" style={{
+                                fontFamily: "'Digital-7', monospace",
+                                fontSize: "2.5rem",
+                                textShadow: "0 0 10px rgba(255, 0, 0, 0.5)",
+                                letterSpacing: "2px"
+                              }}>
+                                {mostRecentMetaDataScan ? 
+                                  Math.floor((new Date() - new Date(mostRecentMetaDataScan.created_at)) / (1000 * 60 * 60 * 24)) : 
+                                  '∞'}
+                              </div>
+                              <div className="text-white small mt-2">day{mostRecentMetaDataScan && 
+                                Math.floor((new Date() - new Date(mostRecentMetaDataScan.created_at)) / (1000 * 60 * 60 * 24)) !== 1 ? 's' : ''} since last MetaData</div>
                             </div>
                           </div>
                         </div>
-                        <div className="d-flex justify-content-between mt-auto gap-2">
-                          <Button 
-                            variant="outline-danger" 
-                            className="flex-fill"
-                            onClick={() => setShowAttackSurfaceVisualizationModal(true)}
-                          >
-                            Visualize Attack Surface
-                          </Button>
-                          <Button 
-                            variant="outline-danger" 
-                            className="flex-fill"
-                            onClick={() => setShowExploreAttackSurfaceModal(true)}
-                          >
-                            Explore Assets
-                          </Button>
-                          <Button 
-                            variant="outline-danger" 
-                            className="flex-fill"
-                            onClick={handleExportWildcardData}
-                          >
-                            Export Data
-                          </Button>
+                        <div className="d-flex flex-column gap-3 w-100 mt-3">
+                          <div className="d-flex justify-content-between gap-2">
+                            <Button variant="outline-danger" className="flex-fill" onClick={handleOpenReconResultsModal}>Recon Results</Button>
+                            <Button 
+                              variant="outline-danger" 
+                              className="flex-fill"
+                              onClick={startNucleiScreenshotScan}
+                              disabled={!mostRecentHttpxScan || 
+                                      mostRecentHttpxScan.status !== "success" || 
+                                      !httpxScans || 
+                                      httpxScans.length === 0}
+                            >
+                              <div className="btn-content">
+                                {isNucleiScreenshotScanning || mostRecentNucleiScreenshotScanStatus === "pending" ? (
+                                  <div className="spinner"></div>
+                                ) : 'Take Screenshots'}
+                              </div>
+                            </Button>
+                            <Button 
+                              variant="outline-danger" 
+                              className="flex-fill"
+                              onClick={handleOpenScreenshotResultsModal}
+                              disabled={!mostRecentNucleiScreenshotScan || mostRecentNucleiScreenshotScan.status !== "success"}
+                            >
+                              View Screenshots
+                            </Button>
+                            <Button 
+                              variant="outline-danger" 
+                              className="flex-fill"
+                              onClick={startMetaDataScan}
+                              disabled={!mostRecentHttpxScan || 
+                                      mostRecentHttpxScan.status !== "success" || 
+                                      !httpxScans || 
+                                      httpxScans.length === 0}
+                            >
+                              <div className="btn-content">
+                                {isMetaDataScanning || mostRecentMetaDataScanStatus === "pending" || mostRecentMetaDataScanStatus === "running" ? (
+                                  <div className="spinner"></div>
+                                ) : 'Gather Metadata'}
+                              </div>
+                            </Button>
+                            <Button 
+                              variant="outline-danger" 
+                              className="flex-fill"
+                              onClick={handleOpenMetaDataModal}
+                              disabled={!mostRecentMetaDataScan || mostRecentMetaDataScan.status !== "success"}
+                            >
+                              View Metadata
+                            </Button>
+                            <Button 
+                              variant="outline-danger" 
+                              className="flex-fill"
+                              onClick={handleOpenROIReport}
+                              disabled={!mostRecentNucleiScreenshotScan || 
+                                      mostRecentNucleiScreenshotScan.status !== "success" || 
+                                      !mostRecentMetaDataScan || 
+                                      mostRecentMetaDataScan.status !== "success"}
+                            >
+                              ROI Report
+                            </Button>
+                          </div>
                         </div>
                       </Card.Body>
                     </Card>

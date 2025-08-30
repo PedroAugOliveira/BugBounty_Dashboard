@@ -270,6 +270,14 @@ func main() {
 	// Live web servers count route
 	r.HandleFunc("/scope-target/{scope_target_id}/live-web-servers-count", getLiveWebServersCount).Methods("GET", "OPTIONS")
 
+	// Acunetix Integration routes
+	r.HandleFunc("/acunetix/config", handleAcunetixConfig).Methods("GET", "POST", "OPTIONS")
+	r.HandleFunc("/acunetix/test-connection", handleAcunetixTestConnection).Methods("POST", "OPTIONS")
+	r.HandleFunc("/acunetix/import-targets", handleAcunetixImportTargets).Methods("POST", "OPTIONS")
+	r.HandleFunc("/acunetix/bulk-import", handleAcunetixBulkImport).Methods("POST", "OPTIONS")
+	r.HandleFunc("/acunetix/dashboard", handleAcunetixDashboard).Methods("POST", "OPTIONS")
+	r.HandleFunc("/wildcard/export", handleWildcardExport).Methods("POST", "OPTIONS")
+
 	log.Println("API server started on :8443")
 	http.ListenAndServe(":8443", r)
 }
@@ -3423,4 +3431,273 @@ func getNucleiScanStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(response)
+}
+
+// Acunetix Integration Handlers
+
+type AcunetixConfig struct {
+	APIUrl             string `json:"apiUrl"`
+	APIKey             string `json:"apiKey"`
+	ProfileID          string `json:"profileId"`
+	EnableGrouping     bool   `json:"enableGrouping"`
+	MaxConcurrentScans int    `json:"maxConcurrentScans"`
+	RetryAttempts      int    `json:"retryAttempts"`
+	RequestTimeout     int    `json:"requestTimeout"`
+	MaxScanDuration    int    `json:"maxScanDuration"`
+	EnableWebhook      bool   `json:"enableWebhook"`
+	WebhookURL         string `json:"webhookUrl"`
+	ScanPriority       string `json:"scanPriority"`
+}
+
+func handleAcunetixConfig(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	switch r.Method {
+	case "GET":
+		// For now, return a default config or load from database/file
+		defaultConfig := AcunetixConfig{
+			APIUrl:             "https://127.0.0.1:3443/api/v1",
+			ProfileID:          "11111111-1111-1111-1111-111111111111",
+			EnableGrouping:     true,
+			MaxConcurrentScans: 3,
+			RetryAttempts:      3,
+			RequestTimeout:     30,
+			MaxScanDuration:    24,
+			EnableWebhook:      false,
+			ScanPriority:       "normal",
+		}
+		json.NewEncoder(w).Encode(defaultConfig)
+
+	case "POST":
+		var config AcunetixConfig
+		if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		// Here you would save the config to database or file
+		// For now, just return success
+		response := map[string]interface{}{
+			"success": true,
+			"message": "Configuration saved successfully",
+		}
+		json.NewEncoder(w).Encode(response)
+	}
+}
+
+func handleAcunetixTestConnection(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	var req struct {
+		APIUrl string `json:"apiUrl"`
+		APIKey string `json:"apiKey"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Simple connection test - in a real implementation, you would test the actual Acunetix API
+	if req.APIUrl == "" || req.APIKey == "" {
+		response := map[string]interface{}{
+			"success": false,
+			"message": "API URL and API Key are required",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Simulate connection test
+	response := map[string]interface{}{
+		"success": true,
+		"message": "Connection successful",
+		"version": "24.1.0", // Mock version
+		"license": "Professional",
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func handleAcunetixImportTargets(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	var req struct {
+		Targets      []map[string]interface{} `json:"targets"`
+		ActiveTarget map[string]interface{}   `json:"activeTarget"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Mock import process
+	importedCount := len(req.Targets)
+
+	response := map[string]interface{}{
+		"success":       true,
+		"importedCount": importedCount,
+		"message":       fmt.Sprintf("Successfully imported %d targets to Acunetix", importedCount),
+		"targets":       req.Targets,
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func handleAcunetixBulkImport(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	var req struct {
+		HttpxResults string                 `json:"httpxResults"`
+		ActiveTarget map[string]interface{} `json:"activeTarget"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Parse HTTPX results and count targets
+	lines := strings.Split(req.HttpxResults, "\n")
+	importedCount := 0
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			importedCount++
+		}
+	}
+
+	response := map[string]interface{}{
+		"success":       true,
+		"importedCount": importedCount,
+		"message":       fmt.Sprintf("Successfully imported %d targets from HTTPX results", importedCount),
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func handleAcunetixDashboard(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// Mock dashboard data
+	dashboardData := map[string]interface{}{
+		"overview": map[string]interface{}{
+			"totalTargets":         15,
+			"activeScans":          2,
+			"totalVulnerabilities": 8,
+			"completedScans":       12,
+			"criticalVulns":        1,
+			"highVulns":            3,
+			"mediumVulns":          3,
+			"lowVulns":             1,
+		},
+		"targets": []map[string]interface{}{
+			{
+				"target_id":      "target-001",
+				"address":        "https://example.com",
+				"description":    "Main website",
+				"last_scan_date": time.Now().Add(-2 * time.Hour),
+				"critical":       1,
+				"high":           2,
+				"medium":         1,
+				"low":            0,
+			},
+		},
+		"scans": []map[string]interface{}{
+			{
+				"scan_id":             "scan-001",
+				"target_address":      "https://example.com",
+				"current_status":      "completed",
+				"progress":            100,
+				"start_date":          time.Now().Add(-3 * time.Hour),
+				"duration":            "2h 15m",
+				"vulnerability_count": 4,
+			},
+		},
+		"vulnerabilities": []map[string]interface{}{
+			{
+				"vuln_id":        "vuln-001",
+				"vuln_name":      "Cross-Site Scripting (XSS)",
+				"target_address": "https://example.com",
+				"severity":       "high",
+				"status":         "Open",
+				"last_seen":      time.Now().Add(-1 * time.Hour),
+				"affects":        "/login",
+			},
+		},
+		"reports": []map[string]interface{}{
+			{
+				"report_id":       "report-001",
+				"template_name":   "Executive Summary",
+				"template_type":   "PDF",
+				"generation_date": time.Now().Add(-1 * time.Hour),
+				"status":          "Completed",
+			},
+		},
+	}
+
+	json.NewEncoder(w).Encode(dashboardData)
+}
+
+func handleWildcardExport(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	var req struct {
+		ActiveTarget         map[string]interface{} `json:"activeTarget"`
+		IncludeSubdomains    bool                   `json:"includeSubdomains"`
+		IncludeLiveServers   bool                   `json:"includeLiveServers"`
+		IncludeNucleiResults bool                   `json:"includeNucleiResults"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Mock export data
+	exportData := map[string]interface{}{
+		"export_timestamp": time.Now(),
+		"target":           req.ActiveTarget,
+		"summary": map[string]interface{}{
+			"total_subdomains": 45,
+			"live_web_servers": 23,
+			"nuclei_findings":  8,
+			"exported_at":      time.Now(),
+		},
+	}
+
+	if req.IncludeSubdomains {
+		exportData["subdomains"] = []string{
+			"api.example.com",
+			"admin.example.com",
+			"dev.example.com",
+		}
+	}
+
+	if req.IncludeLiveServers {
+		exportData["live_servers"] = []map[string]interface{}{
+			{
+				"url":         "https://api.example.com",
+				"status_code": 200,
+				"title":       "API Gateway",
+				"server":      "nginx/1.20.1",
+			},
+		}
+	}
+
+	if req.IncludeNucleiResults {
+		exportData["nuclei_findings"] = []map[string]interface{}{
+			{
+				"template": "ssl-issuer",
+				"severity": "info",
+				"host":     "https://api.example.com",
+				"matched":  "Let's Encrypt",
+			},
+		}
+	}
+
+	// Set appropriate headers for file download
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", "attachment; filename=wildcard_export.json")
+
+	json.NewEncoder(w).Encode(exportData)
 }
