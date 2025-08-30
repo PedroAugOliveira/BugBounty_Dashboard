@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -277,6 +278,7 @@ func main() {
 	r.HandleFunc("/acunetix/bulk-import", handleAcunetixBulkImport).Methods("POST", "OPTIONS")
 	r.HandleFunc("/acunetix/dashboard", handleAcunetixDashboard).Methods("POST", "OPTIONS")
 	r.HandleFunc("/wildcard/export", handleWildcardExport).Methods("POST", "OPTIONS")
+	r.HandleFunc("/wildcard/consolidate-attack-surface/{scope_target_id}", handleWildcardConsolidateAttackSurface).Methods("POST", "OPTIONS")
 
 	log.Println("API server started on :8443")
 	http.ListenAndServe(":8443", r)
@@ -3475,8 +3477,18 @@ func handleAcunetixConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Here you would save the config to database or file
-		// For now, just return success
+		// Save the config to database
+		err := saveAcunetixConfig(config.APIUrl, config.APIKey, config.ProfileID)
+		if err != nil {
+			log.Printf("Error saving Acunetix config: %v", err)
+			response := map[string]interface{}{
+				"success": false,
+				"message": "Failed to save configuration",
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
 		response := map[string]interface{}{
 			"success": true,
 			"message": "Configuration saved successfully",
@@ -3498,7 +3510,6 @@ func handleAcunetixTestConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Simple connection test - in a real implementation, you would test the actual Acunetix API
 	if req.APIUrl == "" || req.APIKey == "" {
 		response := map[string]interface{}{
 			"success": false,
@@ -3508,14 +3519,23 @@ func handleAcunetixTestConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Simulate connection test
-	response := map[string]interface{}{
-		"success": true,
-		"message": "Connection successful",
-		"version": "24.1.0", // Mock version
-		"license": "Professional",
+	// Test real Acunetix API connection
+	success, info := testAcunetixConnection(req.APIUrl, req.APIKey)
+	if success {
+		response := map[string]interface{}{
+			"success": true,
+			"message": "Connection successful",
+			"version": info["version"],
+			"license": info["license"],
+		}
+		json.NewEncoder(w).Encode(response)
+	} else {
+		response := map[string]interface{}{
+			"success": false,
+			"message": fmt.Sprintf("Connection failed: %v", info["error"]),
+		}
+		json.NewEncoder(w).Encode(response)
 	}
-	json.NewEncoder(w).Encode(response)
 }
 
 func handleAcunetixImportTargets(w http.ResponseWriter, r *http.Request) {
@@ -3524,6 +3544,11 @@ func handleAcunetixImportTargets(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Targets      []map[string]interface{} `json:"targets"`
 		ActiveTarget map[string]interface{}   `json:"activeTarget"`
+		Config       struct {
+			APIUrl    string `json:"apiUrl"`
+			APIKey    string `json:"apiKey"`
+			ProfileID string `json:"profileId"`
+		} `json:"config"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -3531,15 +3556,59 @@ func handleAcunetixImportTargets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Mock import process
-	importedCount := len(req.Targets)
+	// Load saved Acunetix config if not provided
+	config := req.Config
+	if config.APIUrl == "" {
+		savedConfig, err := loadAcunetixConfig()
+		if err != nil {
+			response := map[string]interface{}{
+				"success": false,
+				"message": "Acunetix not configured. Please configure API settings first.",
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+		config = savedConfig
+	}
+
+	importedCount := 0
+	failedCount := 0
+	var errors []string
+
+	// Import each target to Acunetix
+	for _, target := range req.Targets {
+		targetUrl, ok := target["url"].(string)
+		if !ok {
+			failedCount++
+			continue
+		}
+
+		description := fmt.Sprintf("Imported from BugBounty Dashboard - %v", req.ActiveTarget["scope_target"])
+
+		// Create target and start scan
+		scanId, err := createTargetAndStartScan(config.APIUrl, config.APIKey, targetUrl, description, config.ProfileID)
+		if err != nil {
+			log.Printf("Failed to create target and start scan for %s: %v", targetUrl, err)
+			failedCount++
+			errors = append(errors, fmt.Sprintf("%s: %v", targetUrl, err))
+			continue
+		}
+
+		log.Printf("Successfully created target and started scan for %s (scan_id: %s)", targetUrl, scanId)
+		importedCount++
+	}
 
 	response := map[string]interface{}{
 		"success":       true,
 		"importedCount": importedCount,
+		"failedCount":   failedCount,
 		"message":       fmt.Sprintf("Successfully imported %d targets to Acunetix", importedCount),
-		"targets":       req.Targets,
 	}
+
+	if len(errors) > 0 {
+		response["errors"] = errors
+	}
+
 	json.NewEncoder(w).Encode(response)
 }
 
@@ -3578,61 +3647,33 @@ func handleAcunetixBulkImport(w http.ResponseWriter, r *http.Request) {
 func handleAcunetixDashboard(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Mock dashboard data
-	dashboardData := map[string]interface{}{
-		"overview": map[string]interface{}{
-			"totalTargets":         15,
-			"activeScans":          2,
-			"totalVulnerabilities": 8,
-			"completedScans":       12,
-			"criticalVulns":        1,
-			"highVulns":            3,
-			"mediumVulns":          3,
-			"lowVulns":             1,
-		},
-		"targets": []map[string]interface{}{
-			{
-				"target_id":      "target-001",
-				"address":        "https://example.com",
-				"description":    "Main website",
-				"last_scan_date": time.Now().Add(-2 * time.Hour),
-				"critical":       1,
-				"high":           2,
-				"medium":         1,
-				"low":            0,
+	// Load Acunetix config
+	config, err := loadAcunetixConfig()
+	if err != nil {
+		response := map[string]interface{}{
+			"success": false,
+			"message": "Acunetix not configured. Please configure API settings first.",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Get real dashboard data from Acunetix
+	dashboardData, err := getAcunetixDashboardData(config.APIUrl, config.APIKey)
+	if err != nil {
+		log.Printf("Error fetching Acunetix dashboard data: %v", err)
+		// Return fallback data if API call fails
+		dashboardData = map[string]interface{}{
+			"overview": map[string]interface{}{
+				"totalTargets":         0,
+				"activeScans":          0,
+				"totalVulnerabilities": 0,
+				"completedScans":       0,
 			},
-		},
-		"scans": []map[string]interface{}{
-			{
-				"scan_id":             "scan-001",
-				"target_address":      "https://example.com",
-				"current_status":      "completed",
-				"progress":            100,
-				"start_date":          time.Now().Add(-3 * time.Hour),
-				"duration":            "2h 15m",
-				"vulnerability_count": 4,
-			},
-		},
-		"vulnerabilities": []map[string]interface{}{
-			{
-				"vuln_id":        "vuln-001",
-				"vuln_name":      "Cross-Site Scripting (XSS)",
-				"target_address": "https://example.com",
-				"severity":       "high",
-				"status":         "Open",
-				"last_seen":      time.Now().Add(-1 * time.Hour),
-				"affects":        "/login",
-			},
-		},
-		"reports": []map[string]interface{}{
-			{
-				"report_id":       "report-001",
-				"template_name":   "Executive Summary",
-				"template_type":   "PDF",
-				"generation_date": time.Now().Add(-1 * time.Hour),
-				"status":          "Completed",
-			},
-		},
+			"targets": []interface{}{},
+			"scans":   []interface{}{},
+			"error":   fmt.Sprintf("Failed to fetch data: %v", err),
+		}
 	}
 
 	json.NewEncoder(w).Encode(dashboardData)
@@ -3700,4 +3741,475 @@ func handleWildcardExport(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename=wildcard_export.json")
 
 	json.NewEncoder(w).Encode(exportData)
+}
+
+// Acunetix API Helper Functions
+func testAcunetixConnection(apiUrl, apiKey string) (bool, map[string]interface{}) {
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/info", apiUrl), nil)
+	if err != nil {
+		return false, map[string]interface{}{"error": fmt.Sprintf("Invalid URL: %v", err)}
+	}
+
+	req.Header.Set("X-Auth", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, map[string]interface{}{"error": fmt.Sprintf("Connection error: %v", err)}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return false, map[string]interface{}{"error": fmt.Sprintf("HTTP %d", resp.StatusCode)}
+	}
+
+	var info map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return false, map[string]interface{}{"error": "Invalid response format"}
+	}
+
+	return true, map[string]interface{}{
+		"version": info["version"],
+		"license": info["license_info"],
+	}
+}
+
+func createAcunetixTarget(apiUrl, apiKey, targetUrl, description string) (string, error) {
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+
+	// Remove protocol from target URL - Acunetix requires hostname only
+	cleanUrl := cleanTargetUrl(targetUrl)
+
+	targetData := map[string]interface{}{
+		"address":     cleanUrl,
+		"description": description,
+		"type":        "default",
+		"criticality": 10,
+	}
+
+	jsonData, err := json.Marshal(targetData)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/targets", apiUrl), strings.NewReader(string(jsonData)))
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("X-Auth", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 201 {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+
+	targetId, ok := result["target_id"].(string)
+	if !ok {
+		return "", fmt.Errorf("invalid target_id in response")
+	}
+
+	return targetId, nil
+}
+
+// createTargetAndStartScan creates a target and immediately starts a scan
+func createTargetAndStartScan(apiUrl, apiKey, targetUrl, description, profileId string) (string, error) {
+	// Step 1: Create target
+	targetId, err := createAcunetixTarget(apiUrl, apiKey, targetUrl, description)
+	if err != nil {
+		return "", fmt.Errorf("failed to create target: %v", err)
+	}
+
+	log.Printf("Created Acunetix target %s for %s", targetId, targetUrl)
+
+	// Step 2: Start scan immediately
+	scanId, err := startAcunetixScan(apiUrl, apiKey, targetId, profileId)
+	if err != nil {
+		// Target was created but scan failed - log but don't fail completely
+		log.Printf("Target created but scan failed for %s: %v", targetUrl, err)
+		return targetId, fmt.Errorf("target created but scan failed: %v", err)
+	}
+
+	log.Printf("Started Acunetix scan %s for target %s", scanId, targetId)
+	return scanId, nil
+}
+
+func startAcunetixScan(apiUrl, apiKey, targetId, profileId string) (string, error) {
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+
+	// Use default profile_id if not provided
+	if profileId == "" {
+		profileId = "11111111-1111-1111-1111-111111111111" // Full Scan profile
+	}
+
+	scanData := map[string]interface{}{
+		"target_id":  targetId,
+		"profile_id": profileId,
+		"schedule": map[string]interface{}{
+			"disable":        false,
+			"start_date":     nil, // Start immediately
+			"time_sensitive": false,
+		},
+	}
+
+	jsonData, err := json.Marshal(scanData)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/scans", apiUrl), strings.NewReader(string(jsonData)))
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("X-Auth", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 201 {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Get scan_id from Location header
+	location := resp.Header.Get("Location")
+	if location == "" {
+		return "", fmt.Errorf("no Location header in response")
+	}
+
+	// Extract scan_id from location (e.g., /api/v1/scans/{scan_id})
+	parts := strings.Split(location, "/")
+	if len(parts) == 0 {
+		return "", fmt.Errorf("invalid Location header format")
+	}
+
+	scanId := parts[len(parts)-1]
+	return scanId, nil
+}
+
+func getAcunetixDashboardData(apiUrl, apiKey string) (map[string]interface{}, error) {
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+
+	// Get targets
+	targetsReq, err := http.NewRequest("GET", fmt.Sprintf("%s/targets", apiUrl), nil)
+	if err != nil {
+		return nil, err
+	}
+	targetsReq.Header.Set("X-Auth", apiKey)
+
+	targetsResp, err := client.Do(targetsReq)
+	if err != nil {
+		return nil, err
+	}
+	defer targetsResp.Body.Close()
+
+	var targets map[string]interface{}
+	if targetsResp.StatusCode == 200 {
+		json.NewDecoder(targetsResp.Body).Decode(&targets)
+	}
+
+	// Get scans
+	scansReq, err := http.NewRequest("GET", fmt.Sprintf("%s/scans", apiUrl), nil)
+	if err != nil {
+		return nil, err
+	}
+	scansReq.Header.Set("X-Auth", apiKey)
+
+	scansResp, err := client.Do(scansReq)
+	if err != nil {
+		return nil, err
+	}
+	defer scansResp.Body.Close()
+
+	var scans map[string]interface{}
+	if scansResp.StatusCode == 200 {
+		json.NewDecoder(scansResp.Body).Decode(&scans)
+	}
+
+	// Safely get array lengths
+	var totalTargets int
+	if targets != nil && targets["targets"] != nil {
+		if targetsList, ok := targets["targets"].([]interface{}); ok {
+			totalTargets = len(targetsList)
+		}
+	}
+
+	var targetsList interface{} = []interface{}{}
+	if targets != nil && targets["targets"] != nil {
+		targetsList = targets["targets"]
+	}
+
+	var scansList interface{} = []interface{}{}
+	if scans != nil && scans["scans"] != nil {
+		scansList = scans["scans"]
+	}
+
+	// Aggregate dashboard data
+	dashboardData := map[string]interface{}{
+		"overview": map[string]interface{}{
+			"totalTargets":         totalTargets,
+			"activeScans":          0,
+			"totalVulnerabilities": 0,
+			"completedScans":       0,
+		},
+		"targets": targetsList,
+		"scans":   scansList,
+	}
+
+	return dashboardData, nil
+}
+
+func loadAcunetixConfig() (struct {
+	APIUrl    string `json:"apiUrl"`
+	APIKey    string `json:"apiKey"`
+	ProfileID string `json:"profileId"`
+}, error) {
+	var config struct {
+		APIUrl    string `json:"apiUrl"`
+		APIKey    string `json:"apiKey"`
+		ProfileID string `json:"profileId"`
+	}
+
+	// Try to load from database first
+	query := `SELECT api_url, api_key, profile_id FROM acunetix_config LIMIT 1`
+	err := dbPool.QueryRow(context.Background(), query).Scan(&config.APIUrl, &config.APIKey, &config.ProfileID)
+
+	if err != nil {
+		// Return default config if no database config exists
+		if err == pgx.ErrNoRows {
+			config.APIUrl = "https://127.0.0.1:3443/api/v1"
+			config.ProfileID = "11111111-1111-1111-1111-111111111111"
+			return config, fmt.Errorf("no configuration found")
+		}
+		return config, err
+	}
+
+	return config, nil
+}
+
+func saveAcunetixConfig(apiUrl, apiKey, profileId string) error {
+	// Create table if it doesn't exist
+	createTableQuery := `
+		CREATE TABLE IF NOT EXISTS acunetix_config (
+			id SERIAL PRIMARY KEY,
+			api_url TEXT NOT NULL,
+			api_key TEXT NOT NULL,
+			profile_id TEXT,
+			created_at TIMESTAMP DEFAULT NOW(),
+			updated_at TIMESTAMP DEFAULT NOW()
+		)
+	`
+	_, err := dbPool.Exec(context.Background(), createTableQuery)
+	if err != nil {
+		return err
+	}
+
+	// Check if config exists
+	var existingId int
+	checkQuery := `SELECT id FROM acunetix_config LIMIT 1`
+	err = dbPool.QueryRow(context.Background(), checkQuery).Scan(&existingId)
+
+	if err != nil && err != pgx.ErrNoRows {
+		return err
+	}
+
+	if err == pgx.ErrNoRows {
+		// Insert new config
+		insertQuery := `
+			INSERT INTO acunetix_config (api_url, api_key, profile_id, updated_at)
+			VALUES ($1, $2, $3, NOW())
+		`
+		_, err = dbPool.Exec(context.Background(), insertQuery, apiUrl, apiKey, profileId)
+	} else {
+		// Update existing config
+		updateQuery := `
+			UPDATE acunetix_config SET 
+				api_url = $1,
+				api_key = $2,
+				profile_id = $3,
+				updated_at = NOW()
+			WHERE id = $4
+		`
+		_, err = dbPool.Exec(context.Background(), updateQuery, apiUrl, apiKey, profileId, existingId)
+	}
+
+	return err
+}
+
+func handleWildcardConsolidateAttackSurface(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	vars := mux.Vars(r)
+	scopeTargetID := vars["scope_target_id"]
+
+	if scopeTargetID == "" {
+		http.Error(w, "Scope target ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Check if the target is a wildcard type
+	var targetType string
+	err := dbPool.QueryRow(context.Background(),
+		"SELECT type FROM scope_targets WHERE id = $1", scopeTargetID).Scan(&targetType)
+
+	if err != nil {
+		http.Error(w, "Scope target not found", http.StatusNotFound)
+		return
+	}
+
+	if targetType != "Wildcard" {
+		response := map[string]interface{}{
+			"success": false,
+			"message": "This endpoint is only for Wildcard targets",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	log.Printf("[WILDCARD CONSOLIDATION] Starting attack surface consolidation for scope target: %s", scopeTargetID)
+
+	// Call the existing attack surface consolidation with some wildcard-specific logic
+	startTime := time.Now()
+
+	// Get HTTPX scans for this target
+	httpxScans, err := getHttpxScansForTarget(scopeTargetID)
+	if err != nil {
+		log.Printf("Error fetching HTTPX scans: %v", err)
+	}
+
+	// Get consolidated subdomains
+	consolidatedSubdomains, err := getConsolidatedSubdomainsForTarget(scopeTargetID)
+	if err != nil {
+		log.Printf("Error fetching consolidated subdomains: %v", err)
+	}
+
+	// Consolidate the attack surface using existing function
+	result, err := utils.ConsolidateAttackSurfaceWildcard(scopeTargetID, httpxScans, consolidatedSubdomains)
+	if err != nil {
+		log.Printf("Error consolidating attack surface: %v", err)
+		http.Error(w, "Failed to consolidate attack surface", http.StatusInternalServerError)
+		return
+	}
+
+	executionTime := time.Since(startTime)
+	log.Printf("[WILDCARD CONSOLIDATION] Completed in %v", executionTime)
+
+	response := map[string]interface{}{
+		"success":        true,
+		"message":        "Attack surface consolidated successfully",
+		"execution_time": executionTime.String(),
+		"result":         result,
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+func getHttpxScansForTarget(scopeTargetID string) ([]map[string]interface{}, error) {
+	rows, err := dbPool.Query(context.Background(), `
+		SELECT scan_id, status, result, created_at 
+		FROM httpx_scans 
+		WHERE scope_target_id = $1 AND status = 'success'
+		ORDER BY created_at DESC
+	`, scopeTargetID)
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var scans []map[string]interface{}
+	for rows.Next() {
+		var scanID, status, result string
+		var createdAt time.Time
+
+		err := rows.Scan(&scanID, &status, &result, &createdAt)
+		if err != nil {
+			continue
+		}
+
+		scans = append(scans, map[string]interface{}{
+			"scan_id":    scanID,
+			"status":     status,
+			"result":     result,
+			"created_at": createdAt,
+		})
+	}
+
+	return scans, nil
+}
+
+func getConsolidatedSubdomainsForTarget(scopeTargetID string) ([]string, error) {
+	rows, err := dbPool.Query(context.Background(), `
+		SELECT subdomain 
+		FROM consolidated_subdomains 
+		WHERE scope_target_id = $1
+	`, scopeTargetID)
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var subdomains []string
+	for rows.Next() {
+		var subdomain string
+		err := rows.Scan(&subdomain)
+		if err != nil {
+			continue
+		}
+		subdomains = append(subdomains, subdomain)
+	}
+
+	return subdomains, nil
+}
+
+// cleanTargetUrl removes protocol from URL for Acunetix compatibility
+func cleanTargetUrl(targetUrl string) string {
+	// Remove http:// or https:// if present
+	if strings.HasPrefix(targetUrl, "https://") {
+		return strings.TrimPrefix(targetUrl, "https://")
+	}
+	if strings.HasPrefix(targetUrl, "http://") {
+		return strings.TrimPrefix(targetUrl, "http://")
+	}
+	return targetUrl
 }

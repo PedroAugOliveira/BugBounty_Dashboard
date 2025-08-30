@@ -14,46 +14,85 @@ const AcunetixTargetSelectorModal = ({ show, handleClose, activeTarget, httpxRes
   const [importStatus, setImportStatus] = useState('');
 
   useEffect(() => {
-    if (show && httpxResults) {
+    if (show) {
       parseHttpxResults();
     }
-  }, [show, httpxResults]);
+  }, [show, httpxResults, activeTarget]);
 
-  const parseHttpxResults = () => {
+  const parseHttpxResults = async () => {
+    if (!activeTarget?.id) {
+      setTargets([]);
+      return;
+    }
+    
     try {
-      if (!httpxResults?.result) {
-        setTargets([]);
-        return;
+      // First try to parse from the result field for backward compatibility
+      if (httpxResults?.result) {
+        const lines = httpxResults.result.split('\n').filter(line => line.trim());
+        const parsedTargets = lines.map((line, index) => {
+          try {
+            const data = JSON.parse(line);
+            return {
+              id: index,
+              url: data.url || '',
+              host: data.host || '',
+              port: data.port || 80,
+              status_code: data.status_code || 0,
+              content_length: data.content_length || 0,
+              title: data.title || '',
+              tech: data.tech || [],
+              server: data.server || '',
+              scheme: data.scheme || 'http',
+              webserver: data.webserver || '',
+              cdn: data.cdn || false,
+              selected: false
+            };
+          } catch (e) {
+            console.error('Error parsing line:', line, e);
+            return null;
+          }
+        }).filter(target => target !== null);
+
+        if (parsedTargets.length > 0) {
+          setTargets(parsedTargets);
+          return;
+        }
       }
 
-      const lines = httpxResults.result.split('\n').filter(line => line.trim());
-      const parsedTargets = lines.map((line, index) => {
-        try {
-          const data = JSON.parse(line);
-          return {
-            id: index,
-            url: data.url || '',
-            host: data.host || '',
-            port: data.port || 80,
-            status_code: data.status_code || 0,
-            content_length: data.content_length || 0,
-            title: data.title || '',
-            tech: data.tech || [],
-            server: data.server || '',
-            scheme: data.scheme || 'http',
-            webserver: data.webserver || '',
-            cdn: data.cdn || false,
-            selected: false
-          };
-        } catch (e) {
-          console.error('Error parsing line:', line, e);
-          return null;
-        }
-      }).filter(target => target !== null);
+      // If no result field or empty, try to fetch from attack surface
+      console.log('Fetching live web servers from attack surface for target:', activeTarget.id);
+      const response = await fetch(
+        `${process.env.REACT_APP_SERVER_PROTOCOL}://${process.env.REACT_APP_SERVER_IP}:${process.env.REACT_APP_SERVER_PORT}/attack-surface-assets/${activeTarget.id}`
+      );
 
-      setTargets(parsedTargets);
+      if (response.ok) {
+        const data = await response.json();
+        const liveWebServers = (data.assets || []).filter(asset => asset.asset_type === 'live_web_server');
+        
+        const targets = liveWebServers.map((asset, index) => ({
+          id: asset.id || index,
+          url: asset.url || asset.asset_identifier,
+          host: asset.domain || new URL(asset.url || asset.asset_identifier).hostname,
+          port: asset.port || 80,
+          status_code: asset.status_code || 200,
+          content_length: asset.content_length || 0,
+          title: asset.title || '',
+          tech: asset.technologies || [],
+          server: asset.web_server || '',
+          scheme: asset.protocol || 'https',
+          webserver: asset.web_server || '',
+          cdn: false,
+          selected: false
+        }));
+
+        console.log('Found live web servers from attack surface:', targets.length);
+        setTargets(targets);
+      } else {
+        console.warn('Failed to fetch attack surface assets, using empty list');
+        setTargets([]);
+      }
     } catch (error) {
-      console.error('Error parsing HTTPX results:', error);
+      console.error('Error loading targets:', error);
       setTargets([]);
     }
   };
