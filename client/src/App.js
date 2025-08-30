@@ -387,6 +387,18 @@ function App() {
   const [mostRecentSubfinderScanStatus, setMostRecentSubfinderScanStatus] = useState(null);
   const [mostRecentSubfinderScan, setMostRecentSubfinderScan] = useState(null);
   const [isSubfinderScanning, setIsSubfinderScanning] = useState(false);
+  // Amass Enum states for wildcard
+  const [amassEnumScans, setAmassEnumScans] = useState([]);
+  const [mostRecentAmassEnumScanStatus, setMostRecentAmassEnumScanStatus] = useState(null);
+  const [mostRecentAmassEnumScan, setMostRecentAmassEnumScan] = useState(null);
+  const [isAmassEnumScanning, setIsAmassEnumScanning] = useState(false);
+  const [showAmassEnumResultsModal, setShowAmassEnumResultsModal] = useState(false);
+  // DNSx states for wildcard
+  const [dnsxScans, setDNSxScans] = useState([]);
+  const [mostRecentDNSxScanStatus, setMostRecentDNSxScanStatus] = useState(null);
+  const [mostRecentDNSxScan, setMostRecentDNSxScan] = useState(null);
+  const [isDNSxScanning, setIsDNSxScanning] = useState(false);
+  const [showDNSxResultsModal, setShowDNSxResultsModal] = useState(false);
   const [showShuffleDNSResultsModal, setShowShuffleDNSResultsModal] = useState(false);
   const [shuffleDNSScans, setShuffleDNSScans] = useState([]);
   const [mostRecentShuffleDNSScanStatus, setMostRecentShuffleDNSScanStatus] = useState(null);
@@ -705,6 +717,94 @@ function App() {
 
   const handleCloseAcunetixDashboardModal = () => setShowAcunetixDashboardModal(false);
   const handleOpenAcunetixDashboardModal = () => setShowAcunetixDashboardModal(true);
+
+  // Amass Enum handlers for wildcard
+  const handleCloseAmassEnumResultsModal = () => setShowAmassEnumResultsModal(false);
+  const handleOpenAmassEnumResultsModal = () => setShowAmassEnumResultsModal(true);
+
+  // DNSx handlers for wildcard
+  const handleCloseDNSxResultsModal = () => setShowDNSxResultsModal(false);
+  const handleOpenDNSxResultsModal = () => setShowDNSxResultsModal(true);
+
+  // Amass Enum scan function for wildcard
+  const startAmassEnumScan = async () => {
+    if (!activeTarget?.id) {
+      alert('No active target selected.');
+      return;
+    }
+
+    setIsAmassEnumScanning(true);
+    try {
+      const response = await fetch(
+        `${process.env.REACT_APP_SERVER_PROTOCOL}://${process.env.REACT_APP_SERVER_IP}:${process.env.REACT_APP_SERVER_PORT}/amass-enum/scan`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            scopeTargetId: activeTarget.id,
+            domain: activeTarget.scope_target
+          })
+        }
+      );
+
+      if (response.ok) {
+        setToastTitle('Success');
+        setToastMessage('Amass Enum scan started successfully');
+        setShowToast(true);
+      } else {
+        throw new Error('Failed to start Amass Enum scan');
+      }
+    } catch (error) {
+      console.error('Error starting Amass Enum scan:', error);
+      setToastTitle('Error');
+      setToastMessage('Failed to start Amass Enum scan');
+      setShowToast(true);
+    } finally {
+      setIsAmassEnumScanning(false);
+    }
+  };
+
+  // DNSx scan function for wildcard
+  const startDNSxScan = async () => {
+    if (!activeTarget?.id) {
+      alert('No active target selected.');
+      return;
+    }
+
+    setIsDNSxScanning(true);
+    try {
+      const response = await fetch(
+        `${process.env.REACT_APP_SERVER_PROTOCOL}://${process.env.REACT_APP_SERVER_IP}:${process.env.REACT_APP_SERVER_PORT}/dnsx/scan`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            scopeTargetId: activeTarget.id,
+            domain: activeTarget.scope_target
+          })
+        }
+      );
+
+      if (response.ok) {
+        setToastTitle('Success');
+        setToastMessage('DNSx scan started successfully');
+        setShowToast(true);
+      } else {
+        throw new Error('Failed to start DNSx scan');
+      }
+    } catch (error) {
+      console.error('Error starting DNSx scan:', error);
+      setToastTitle('Error');
+      setToastMessage('Failed to start DNSx scan');
+      setShowToast(true);
+    } finally {
+      setIsDNSxScanning(false);
+    }
+  };
 
   // Acunetix Functions
   const startAcunetixBulkImport = async () => {
@@ -6524,6 +6624,29 @@ function App() {
         handleClose={handleCloseAcunetixDashboardModal}
         activeTarget={activeTarget}
       />
+
+      {/* Wildcard Specific Modals */}
+      <Modal data-bs-theme="dark" show={showAmassEnumResultsModal} onHide={handleCloseAmassEnumResultsModal} size="xl">
+        <Modal.Header closeButton>
+          <Modal.Title className="text-danger">Amass Enum Results</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <pre className="text-white small" style={{ maxHeight: '400px', overflow: 'auto' }}>
+            {mostRecentAmassEnumScan?.result || 'No results available'}
+          </pre>
+        </Modal.Body>
+      </Modal>
+
+      <Modal data-bs-theme="dark" show={showDNSxResultsModal} onHide={handleCloseDNSxResultsModal} size="xl">
+        <Modal.Header closeButton>
+          <Modal.Title className="text-danger">DNSx Results</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <pre className="text-white small" style={{ maxHeight: '400px', overflow: 'auto' }}>
+            {mostRecentDNSxScan?.result || 'No results available'}
+          </pre>
+        </Modal.Body>
+      </Modal>
     </Container>
   );
 }
