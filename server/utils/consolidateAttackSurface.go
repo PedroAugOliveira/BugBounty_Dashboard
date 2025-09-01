@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type AttackSurfaceAsset struct {
@@ -3617,167 +3618,6 @@ func enrichFQDNsWithInvestigateData(scopeTargetID string) (int, error) {
 	return enrichedCount, nil
 }
 
-// ConsolidateAttackSurfaceWildcard consolidates attack surface specifically for wildcard targets
-func ConsolidateAttackSurfaceWildcard(scopeTargetID string, httpxScans []map[string]interface{}, consolidatedSubdomains []string) (map[string]interface{}, error) {
-	log.Printf("[WILDCARD CONSOLIDATION] Starting consolidation for scope target: %s", scopeTargetID)
-
-	startTime := time.Now()
-
-	// Clear existing consolidated attack surface assets
-	_, err := dbPool.Exec(context.Background(),
-		"DELETE FROM consolidated_attack_surface_assets WHERE scope_target_id = $1", scopeTargetID)
-	if err != nil {
-		log.Printf("Error clearing existing attack surface assets: %v", err)
-		return nil, err
-	}
-
-	assetCount := 0
-
-	// Process HTTPX scans to create live web server assets
-	for _, scan := range httpxScans {
-		result, ok := scan["result"].(string)
-		if !ok || result == "" {
-			continue
-		}
-
-		lines := strings.Split(result, "\n")
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-
-			var httpxResult map[string]interface{}
-			if err := json.Unmarshal([]byte(line), &httpxResult); err != nil {
-				continue
-			}
-
-			urlStr, ok := httpxResult["url"].(string)
-			if !ok || urlStr == "" {
-				continue
-			}
-
-			// Create live web server asset
-			assetID := uuid.New().String()
-
-			// Extract domain from URL
-			var domain string
-			if parsed, err := url.Parse(urlStr); err == nil {
-				domain = parsed.Host
-			}
-
-			// Extract technologies
-			var technologies []string
-			if tech, ok := httpxResult["tech"].([]interface{}); ok {
-				for _, t := range tech {
-					if techStr, ok := t.(string); ok {
-						technologies = append(technologies, techStr)
-					}
-				}
-			}
-
-			// Get status code
-			var statusCode int
-			if sc, ok := httpxResult["status_code"].(float64); ok {
-				statusCode = int(sc)
-			}
-
-			// Get content length
-			var contentLength int
-			if cl, ok := httpxResult["content_length"].(float64); ok {
-				contentLength = int(cl)
-			}
-
-			// Get title
-			title, _ := httpxResult["title"].(string)
-
-			// Get server
-			server, _ := httpxResult["server"].(string)
-
-			// Get port
-			var port int
-			if p, ok := httpxResult["port"].(float64); ok {
-				port = int(p)
-			}
-
-			// Get protocol
-			protocol, _ := httpxResult["scheme"].(string)
-			if protocol == "" {
-				protocol = "https"
-			}
-
-			// Insert into consolidated_attack_surface_assets
-			query := `
-				INSERT INTO consolidated_attack_surface_assets (
-					id, scope_target_id, asset_type, asset_identifier, 
-					url, domain, port, protocol, status_code, 
-					title, web_server, technologies, content_length,
-					created_at, updated_at
-				) VALUES (
-					$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW()
-				)
-			`
-
-			_, err = dbPool.Exec(context.Background(), query,
-				assetID, scopeTargetID, "live_web_server", urlStr,
-				urlStr, domain, port, protocol, statusCode,
-				title, server, technologies, contentLength,
-			)
-
-			if err != nil {
-				log.Printf("Error inserting live web server asset: %v", err)
-				continue
-			}
-
-			assetCount++
-		}
-	}
-
-	// Process consolidated subdomains to create FQDN assets
-	for _, subdomain := range consolidatedSubdomains {
-		if subdomain == "" {
-			continue
-		}
-
-		assetID := uuid.New().String()
-
-		query := `
-			INSERT INTO consolidated_attack_surface_assets (
-				id, scope_target_id, asset_type, asset_identifier,
-				fqdn, domain, created_at, updated_at
-			) VALUES (
-				$1, $2, $3, $4, $5, $6, NOW(), NOW()
-			)
-		`
-
-		_, err = dbPool.Exec(context.Background(), query,
-			assetID, scopeTargetID, "fqdn", subdomain,
-			subdomain, subdomain,
-		)
-
-		if err != nil {
-			log.Printf("Error inserting FQDN asset: %v", err)
-			continue
-		}
-
-		assetCount++
-	}
-
-	executionTime := time.Since(startTime)
-	log.Printf("[WILDCARD CONSOLIDATION] Completed: %d assets in %v", assetCount, executionTime)
-
-	result := map[string]interface{}{
-		"total_assets":     assetCount,
-		"execution_time":   executionTime.String(),
-		"live_web_servers": len(httpxScans),
-		"fqdns":            len(consolidatedSubdomains),
-	}
-
-	return result, nil
-}
-
-// Optimized enrichment functions with reasonable timeouts for attack surface consolidation
-
 func getSSLInfoFast(domain string) map[string]interface{} {
 	// Skip obviously non-SSL domains to save time
 	if strings.Contains(domain, "_") || strings.HasPrefix(domain, "*.") {
@@ -3979,4 +3819,158 @@ func getDNSInfoFast(domain string) ([]string, map[string]interface{}) {
 	}
 
 	return resolvedIPs, dnsInfo
+}
+
+// ConsolidateAttackSurfaceWildcard consolidates the attack surface for wildcard targets
+func ConsolidateAttackSurfaceWildcard(dbPool *pgxpool.Pool, scopeTargetID string, httpxScans []interface{}, consolidatedSubdomains []interface{}) error {
+	ctx := context.Background()
+
+	log.Printf("[WILDCARD CONSOLIDATION] Starting consolidation for scope target: %s", scopeTargetID)
+
+	// Clear existing consolidated assets for this scope target
+	_, err := dbPool.Exec(ctx, `
+		DELETE FROM consolidated_attack_surface_assets 
+		WHERE scope_target_id = $1
+	`, scopeTargetID)
+
+	if err != nil {
+		return fmt.Errorf("failed to clear existing assets: %v", err)
+	}
+
+	assetCount := 0
+
+	// Process HTTPX scan results to create live_web_server assets
+	for _, scan := range httpxScans {
+		scanMap, ok := scan.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		result, ok := scanMap["result"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		resultStr, ok := result["String"].(string)
+		if !ok || resultStr == "" {
+			continue
+		}
+
+		// Parse each line of HTTPX results
+		lines := strings.Split(resultStr, "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+
+			// Extract URL from the line
+			parts := strings.Fields(line)
+			if len(parts) == 0 {
+				continue
+			}
+
+			urlStr := parts[0]
+			parsedURL, err := url.Parse(urlStr)
+			if err != nil {
+				log.Printf("Failed to parse URL %s: %v", urlStr, err)
+				continue
+			}
+
+			// Extract domain and other info
+			domain := parsedURL.Hostname()
+			port := 80
+			if parsedURL.Port() != "" {
+				port, _ = strconv.Atoi(parsedURL.Port())
+			} else if parsedURL.Scheme == "https" {
+				port = 443
+			}
+
+			// Extract additional info from the line
+			var technologies []string
+			var statusCode int = 200
+			var contentLength int
+			var title, server string
+
+			// Simple parsing of additional fields
+			if len(parts) > 1 {
+				for i, part := range parts[1:] {
+					if strings.HasPrefix(part, "[") && strings.HasSuffix(part, "]") {
+						// Status code
+						statusStr := strings.Trim(part, "[]")
+						statusCode, _ = strconv.Atoi(statusStr)
+					} else if i == len(parts)-2 && strings.Contains(part, "bytes") {
+						// Content length
+						contentLength, _ = strconv.Atoi(strings.Split(part, " ")[0])
+					}
+				}
+			}
+
+			// Create live_web_server asset
+			assetID := uuid.New().String()
+			_, err = dbPool.Exec(ctx, `
+				INSERT INTO consolidated_attack_surface_assets (
+					id, scope_target_id, asset_type, asset_identifier,
+					url, domain, technologies, status_code,
+					content_length, title, web_server, port, protocol,
+					created_at, updated_at
+				) VALUES (
+					$1, $2, $3, $4,
+					$5, $6, $7, $8,
+					$9, $10, $11, $12, $13,
+					NOW(), NOW()
+				)
+			`, assetID, scopeTargetID, "live_web_server", urlStr,
+				urlStr, domain, technologies, statusCode,
+				contentLength, title, server, port, parsedURL.Scheme)
+
+			if err != nil {
+				log.Printf("Failed to insert live_web_server asset: %v", err)
+				continue
+			}
+
+			assetCount++
+		}
+	}
+
+	// Process consolidated subdomains to create fqdn assets
+	for _, subdomain := range consolidatedSubdomains {
+		var subdomainStr string
+
+		switch v := subdomain.(type) {
+		case string:
+			subdomainStr = v
+		case map[string]interface{}:
+			if s, ok := v["subdomain"].(string); ok {
+				subdomainStr = s
+			}
+		}
+
+		if subdomainStr == "" {
+			continue
+		}
+
+		// Create fqdn asset
+		assetID := uuid.New().String()
+		_, err = dbPool.Exec(ctx, `
+			INSERT INTO consolidated_attack_surface_assets (
+				id, scope_target_id, asset_type, asset_identifier,
+				domain, created_at, updated_at
+			) VALUES (
+				$1, $2, $3, $4,
+				$5, NOW(), NOW()
+			)
+		`, assetID, scopeTargetID, "fqdn", subdomainStr, subdomainStr)
+
+		if err != nil {
+			log.Printf("Failed to insert fqdn asset: %v", err)
+			continue
+		}
+
+		assetCount++
+	}
+
+	log.Printf("[WILDCARD CONSOLIDATION] Consolidated %d assets for scope target: %s", assetCount, scopeTargetID)
+
+	return nil
 }

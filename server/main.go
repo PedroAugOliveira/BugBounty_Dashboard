@@ -3457,19 +3457,38 @@ func handleAcunetixConfig(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case "GET":
-		// For now, return a default config or load from database/file
-		defaultConfig := AcunetixConfig{
-			APIUrl:             "https://127.0.0.1:3443/api/v1",
-			ProfileID:          "11111111-1111-1111-1111-111111111111",
-			EnableGrouping:     true,
-			MaxConcurrentScans: 3,
-			RetryAttempts:      3,
-			RequestTimeout:     30,
-			MaxScanDuration:    24,
-			EnableWebhook:      false,
-			ScanPriority:       "normal",
+		// Load saved config from database
+		config, err := loadAcunetixConfig()
+		if err != nil {
+			// Return default config if not saved yet
+			defaultConfig := AcunetixConfig{
+				APIUrl:             "https://127.0.0.1:3443/api/v1",
+				ProfileID:          "11111111-1111-1111-1111-111111111111",
+				EnableGrouping:     true,
+				MaxConcurrentScans: 3,
+				RetryAttempts:      3,
+				RequestTimeout:     30,
+				MaxScanDuration:    24,
+				EnableWebhook:      false,
+				ScanPriority:       "normal",
+			}
+			json.NewEncoder(w).Encode(defaultConfig)
+		} else {
+			// Return the saved config
+			responseConfig := AcunetixConfig{
+				APIUrl:             config.APIUrl,
+				APIKey:             config.APIKey,
+				ProfileID:          config.ProfileID,
+				EnableGrouping:     true,
+				MaxConcurrentScans: 3,
+				RetryAttempts:      3,
+				RequestTimeout:     30,
+				MaxScanDuration:    24,
+				EnableWebhook:      false,
+				ScanPriority:       "normal",
+			}
+			json.NewEncoder(w).Encode(responseConfig)
 		}
-		json.NewEncoder(w).Encode(defaultConfig)
 
 	case "POST":
 		var config AcunetixConfig
@@ -3867,6 +3886,18 @@ func testAcunetixConnection(apiUrl, apiKey string) (bool, map[string]interface{}
 	}
 }
 
+// cleanTargetUrl removes protocol from URL for Acunetix compatibility
+func cleanTargetUrl(targetUrl string) string {
+	// Remove http:// or https:// prefix
+	targetUrl = strings.TrimPrefix(targetUrl, "http://")
+	targetUrl = strings.TrimPrefix(targetUrl, "https://")
+
+	// Remove trailing slash if present
+	targetUrl = strings.TrimSuffix(targetUrl, "/")
+
+	return targetUrl
+}
+
 func createAcunetixTarget(apiUrl, apiKey, targetUrl, description string) (string, error) {
 	client := &http.Client{
 		Timeout: 30 * time.Second,
@@ -4165,137 +4196,38 @@ func handleWildcardConsolidateAttackSurface(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(r)
-	scopeTargetID := vars["scope_target_id"]
+	scopeTargetId := vars["scope_target_id"]
 
-	if scopeTargetID == "" {
+	if scopeTargetId == "" {
 		http.Error(w, "Scope target ID is required", http.StatusBadRequest)
 		return
 	}
 
-	// Check if the target is a wildcard type
-	var targetType string
-	err := dbPool.QueryRow(context.Background(),
-		"SELECT type FROM scope_targets WHERE id = $1", scopeTargetID).Scan(&targetType)
+	var req struct {
+		HttpxScans             []interface{} `json:"httpxScans"`
+		ConsolidatedSubdomains []interface{} `json:"consolidatedSubdomains"`
+	}
 
-	if err != nil {
-		http.Error(w, "Scope target not found", http.StatusNotFound)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 
-	if targetType != "Wildcard" {
+	// Call the consolidation function from utils
+	err := utils.ConsolidateAttackSurfaceWildcard(dbPool, scopeTargetId, req.HttpxScans, req.ConsolidatedSubdomains)
+	if err != nil {
+		log.Printf("Error consolidating wildcard attack surface: %v", err)
 		response := map[string]interface{}{
 			"success": false,
-			"message": "This endpoint is only for Wildcard targets",
+			"message": fmt.Sprintf("Failed to consolidate attack surface: %v", err),
 		}
 		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	log.Printf("[WILDCARD CONSOLIDATION] Starting attack surface consolidation for scope target: %s", scopeTargetID)
-
-	// Call the existing attack surface consolidation with some wildcard-specific logic
-	startTime := time.Now()
-
-	// Get HTTPX scans for this target
-	httpxScans, err := getHttpxScansForTarget(scopeTargetID)
-	if err != nil {
-		log.Printf("Error fetching HTTPX scans: %v", err)
-	}
-
-	// Get consolidated subdomains
-	consolidatedSubdomains, err := getConsolidatedSubdomainsForTarget(scopeTargetID)
-	if err != nil {
-		log.Printf("Error fetching consolidated subdomains: %v", err)
-	}
-
-	// Consolidate the attack surface using existing function
-	result, err := utils.ConsolidateAttackSurfaceWildcard(scopeTargetID, httpxScans, consolidatedSubdomains)
-	if err != nil {
-		log.Printf("Error consolidating attack surface: %v", err)
-		http.Error(w, "Failed to consolidate attack surface", http.StatusInternalServerError)
-		return
-	}
-
-	executionTime := time.Since(startTime)
-	log.Printf("[WILDCARD CONSOLIDATION] Completed in %v", executionTime)
-
 	response := map[string]interface{}{
-		"success":        true,
-		"message":        "Attack surface consolidated successfully",
-		"execution_time": executionTime.String(),
-		"result":         result,
+		"success": true,
+		"message": "Attack surface consolidated successfully",
 	}
-
 	json.NewEncoder(w).Encode(response)
-}
-
-func getHttpxScansForTarget(scopeTargetID string) ([]map[string]interface{}, error) {
-	rows, err := dbPool.Query(context.Background(), `
-		SELECT scan_id, status, result, created_at 
-		FROM httpx_scans 
-		WHERE scope_target_id = $1 AND status = 'success'
-		ORDER BY created_at DESC
-	`, scopeTargetID)
-
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var scans []map[string]interface{}
-	for rows.Next() {
-		var scanID, status, result string
-		var createdAt time.Time
-
-		err := rows.Scan(&scanID, &status, &result, &createdAt)
-		if err != nil {
-			continue
-		}
-
-		scans = append(scans, map[string]interface{}{
-			"scan_id":    scanID,
-			"status":     status,
-			"result":     result,
-			"created_at": createdAt,
-		})
-	}
-
-	return scans, nil
-}
-
-func getConsolidatedSubdomainsForTarget(scopeTargetID string) ([]string, error) {
-	rows, err := dbPool.Query(context.Background(), `
-		SELECT subdomain 
-		FROM consolidated_subdomains 
-		WHERE scope_target_id = $1
-	`, scopeTargetID)
-
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var subdomains []string
-	for rows.Next() {
-		var subdomain string
-		err := rows.Scan(&subdomain)
-		if err != nil {
-			continue
-		}
-		subdomains = append(subdomains, subdomain)
-	}
-
-	return subdomains, nil
-}
-
-// cleanTargetUrl removes protocol from URL for Acunetix compatibility
-func cleanTargetUrl(targetUrl string) string {
-	// Remove http:// or https:// if present
-	if strings.HasPrefix(targetUrl, "https://") {
-		return strings.TrimPrefix(targetUrl, "https://")
-	}
-	if strings.HasPrefix(targetUrl, "http://") {
-		return strings.TrimPrefix(targetUrl, "http://")
-	}
-	return targetUrl
 }

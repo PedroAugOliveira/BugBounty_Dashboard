@@ -548,6 +548,7 @@ function App() {
   const [amassIntelSelectedNetworkRangesCount, setAmassIntelSelectedNetworkRangesCount] = useState(0);
   const [showDNSxConfigModal, setShowDNSxConfigModal] = useState(false);
   const [showAcunetixBulkTargetModal, setShowAcunetixBulkTargetModal] = useState(false);
+  const [isConsolidatingWildcardAttackSurface, setIsConsolidatingWildcardAttackSurface] = useState(false);
   // Removed unused DNSx wildcard targets variable - replaced with domains count below
   const [ipPortScans, setIPPortScans] = useState([]);
   const [mostRecentIPPortScan, setMostRecentIPPortScan] = useState(null);
@@ -610,6 +611,47 @@ function App() {
   const handleCloseCloudDomainsModal = () => setShowCloudDomainsModal(false);
   const handleCloseUniqueSubdomainsModal = () => setShowUniqueSubdomainsModal(false);
   const handleCloseMetaDataModal = () => setShowMetaDataModal(false);
+  
+  // Wildcard consolidation handler
+  const handleConsolidateWildcardAttackSurface = async () => {
+    if (!activeTarget?.id) return;
+    
+    setIsConsolidatingWildcardAttackSurface(true);
+    try {
+      const response = await fetch(
+        `${process.env.REACT_APP_SERVER_PROTOCOL}://${process.env.REACT_APP_SERVER_IP}:${process.env.REACT_APP_SERVER_PORT}/wildcard/consolidate-attack-surface/${activeTarget.id}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            httpxScans: httpxScans,
+            consolidatedSubdomains: consolidatedSubdomains
+          })
+        }
+      );
+      
+      if (response.ok) {
+        setToastTitle('Success');
+        setToastMessage('Attack surface consolidated successfully');
+        setShowToast(true);
+        
+        // Refresh the data
+        fetchConsolidatedSubdomains();
+        fetchHttpxScans();
+      } else {
+        throw new Error('Failed to consolidate attack surface');
+      }
+    } catch (error) {
+      console.error('Error consolidating attack surface:', error);
+      setToastTitle('Error');
+      setToastMessage('Failed to consolidate attack surface');
+      setShowToast(true);
+    } finally {
+      setIsConsolidatingWildcardAttackSurface(false);
+    }
+  };
   const handleCloseSettingsModal = () => {
     setShowSettingsModal(false);
     const checkApiKeys = async () => {
@@ -6353,83 +6395,7 @@ function App() {
                   </Col>
                 </Row>
 
-                {/* Acunetix Integration Section */}
-                <h4 className="text-secondary mb-3 fs-5">Acunetix Web Vulnerability Scanner Integration</h4>
-                <HelpMeLearn section="wildcardAcunetixIntegration" />
-                <Row className="mb-4">
-                  <Col>
-                    <Card className="shadow-sm" style={{ minHeight: '300px' }}>
-                      <Card.Body className="d-flex flex-column justify-content-between">
-                        <div>
-                          <Card.Title className="text-danger fs-3 mb-3 text-center">
-                            <a href="https://www.acunetix.com/" className="text-danger text-decoration-none">
-                              Acunetix Professional Scanner
-                            </a>
-                          </Card.Title>
-                          <Card.Text className="text-white small fst-italic text-center mb-3">
-                            Advanced web application security scanner for deep vulnerability analysis. Import discovered live web servers as targets for comprehensive DAST scanning.
-                          </Card.Text>
-                          <div className="row text-center mb-3">
-                            <div className="col">
-                              <Card.Text className="text-white small">
-                                <strong>Available Targets:</strong> <span className="text-success">{getHttpxResultsCount(mostRecentHttpxScan)}</span>
-                              </Card.Text>
-                              <Card.Text className="text-white small">
-                                <strong>Selected for Import:</strong> <span className="text-info">0</span>
-                              </Card.Text>
-                            </div>
-                            <div className="col">
-                              <Card.Text className="text-white small">
-                                <strong>Queue Status:</strong> <span className="text-warning">Ready</span>
-                              </Card.Text>
-                              <Card.Text className="text-white small">
-                                <strong>Active Scans:</strong> <span className="text-primary">0</span>
-                              </Card.Text>
-                            </div>
-                            <div className="col">
-                              <Card.Text className="text-white small">
-                                <strong>API Status:</strong> <span className="text-success">Connected</span>
-                              </Card.Text>
-                              <Card.Text className="text-white small">
-                                <strong>License:</strong> <span className="text-info">Professional</span>
-                              </Card.Text>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="d-flex justify-content-between w-100 mt-3 gap-2">
-                          <Button variant="outline-danger" className="flex-fill" onClick={handleOpenAcunetixConfigModal}>API Configuration</Button>
-                          <Button 
-                            variant="outline-danger" 
-                            className="flex-fill" 
-                            onClick={handleOpenAcunetixTargetSelectorModal}
-                            disabled={!mostRecentHttpxScan || getHttpxResultsCount(mostRecentHttpxScan) === 0}
-                          >
-                            Select Targets
-                          </Button>
-                          <Button 
-                            variant="outline-danger" 
-                            className="flex-fill"
-                            onClick={handleOpenAcunetixDashboardModal}
-                          >
-                            Dashboard
-                          </Button>
-                          <Button
-                            variant="outline-danger"
-                            className="flex-fill"
-                            onClick={startAcunetixBulkImport}
-                            disabled={!mostRecentHttpxScan || getHttpxResultsCount(mostRecentHttpxScan) === 0}
-                          >
-                            <div className="btn-content">
-                              {isAcunetixImporting ? (
-                                <div className="spinner"></div>
-                              ) : 'Bulk Import'}
-                            </div>
-                          </Button>
-                        </div>
-                      </Card.Body>
-                    </Card>
-                  </Col>
-                </Row>
+
 
                 <h4 className="text-secondary mb-3 fs-3 text-center">DECISION POINT</h4>
                 <HelpMeLearn section="decisionPoint" />
@@ -6534,6 +6500,59 @@ function App() {
                               ROI Report
                             </Button>
                           </div>
+                        </div>
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                </Row>
+
+                {/* Attack Surface Consolidation */}
+                <h4 className="text-secondary mb-3 fs-5">Attack Surface Summary</h4>
+                <HelpMeLearn section="wildcardAttackSurfaceSummary" />
+                <Row className="mb-4">
+                  <Col>
+                    <Card className="shadow-sm h-100 text-center" style={{ minHeight: '200px' }}>
+                      <Card.Body className="d-flex flex-column">
+                        <Card.Title className="text-danger fs-4 mb-3">
+                          <i className="fas fa-network-wired me-2"></i>
+                          Consolidated Attack Surface
+                        </Card.Title>
+                        <Card.Text className="text-white small fst-italic mb-4">
+                          Consolidate all discovered assets from various enumeration tools into a unified attack surface view for comprehensive analysis and targeting.
+                        </Card.Text>
+                        <div className="text-danger mb-4">
+                          <div className="row">
+                            <div className="col">
+                              <h3 className="mb-0">{consolidatedSubdomainsCount || 0}</h3>
+                              <small className="text-white-50">Total<br/>Subdomains</small>
+                            </div>
+                            <div className="col">
+                              <h3 className="mb-0">{mostRecentHttpxScan?.live_web_servers_found || 0}</h3>
+                              <small className="text-white-50">Live Web<br/>Servers</small>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="d-flex justify-content-between mt-auto gap-2">
+                          <Button 
+                            variant="outline-danger" 
+                            className="flex-fill"
+                            onClick={handleConsolidateWildcardAttackSurface}
+                            disabled={isConsolidatingWildcardAttackSurface}
+                          >
+                            {isConsolidatingWildcardAttackSurface ? (
+                              <><Spinner animation="border" size="sm" className="me-2" />Consolidating...</>
+                            ) : (
+                              <><i className="fas fa-compress-alt me-1"></i>Consolidate</>
+                            )}
+                          </Button>
+                          <Button 
+                            variant="outline-danger" 
+                            className="flex-fill"
+                            onClick={handleOpenExploreAttackSurfaceModal}
+                          >
+                            <i className="fas fa-search me-1"></i>
+                            Explore
+                          </Button>
                         </div>
                       </Card.Body>
                     </Card>
