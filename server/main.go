@@ -276,6 +276,7 @@ func main() {
 	r.HandleFunc("/acunetix/test-connection", handleAcunetixTestConnection).Methods("POST", "OPTIONS")
 	r.HandleFunc("/acunetix/import-targets", handleAcunetixImportTargets).Methods("POST", "OPTIONS")
 	r.HandleFunc("/acunetix/bulk-import", handleAcunetixBulkImport).Methods("POST", "OPTIONS")
+	r.HandleFunc("/acunetix/bulk-target-scan", handleAcunetixBulkTargetScan).Methods("POST", "OPTIONS")
 	r.HandleFunc("/acunetix/dashboard", handleAcunetixDashboard).Methods("POST", "OPTIONS")
 	r.HandleFunc("/wildcard/export", handleWildcardExport).Methods("POST", "OPTIONS")
 	r.HandleFunc("/wildcard/consolidate-attack-surface/{scope_target_id}", handleWildcardConsolidateAttackSurface).Methods("POST", "OPTIONS")
@@ -3607,6 +3608,91 @@ func handleAcunetixImportTargets(w http.ResponseWriter, r *http.Request) {
 
 	if len(errors) > 0 {
 		response["errors"] = errors
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+func handleAcunetixBulkTargetScan(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	var req struct {
+		Targets      []string               `json:"targets"`
+		Description  string                 `json:"description"`
+		ActiveTarget map[string]interface{} `json:"activeTarget"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Targets) == 0 {
+		http.Error(w, "No targets provided", http.StatusBadRequest)
+		return
+	}
+
+	// Load Acunetix configuration
+	config, err := loadAcunetixConfig()
+	if err != nil {
+		log.Printf("Failed to load Acunetix config: %v", err)
+		http.Error(w, "Acunetix not configured", http.StatusInternalServerError)
+		return
+	}
+
+	startTime := time.Now()
+	createdCount := 0
+	scansStarted := 0
+	failedCount := 0
+	var errors []string
+
+	log.Printf("Starting bulk target creation for %d targets", len(req.Targets))
+
+	// Process each target
+	for _, target := range req.Targets {
+		target = strings.TrimSpace(target)
+		if target == "" {
+			continue
+		}
+
+		description := req.Description
+		if description == "" {
+			description = fmt.Sprintf("Bulk scan from BugBounty Dashboard - %v", req.ActiveTarget["scope_target"])
+		}
+
+		// Create target and start scan
+		scanId, err := createTargetAndStartScan(config.APIUrl, config.APIKey, target, description, config.ProfileID)
+		if err != nil {
+			log.Printf("Failed to process target %s: %v", target, err)
+			failedCount++
+			errors = append(errors, fmt.Sprintf("%s: %v", target, err))
+			continue
+		}
+
+		if scanId != "" {
+			createdCount++
+			scansStarted++
+			log.Printf("Successfully processed target %s (scan_id: %s)", target, scanId)
+		}
+	}
+
+	processingTime := time.Since(startTime)
+	totalTargets := createdCount + failedCount
+	successRate := 0.0
+	if totalTargets > 0 {
+		successRate = (float64(createdCount) / float64(totalTargets)) * 100
+	}
+
+	response := map[string]interface{}{
+		"success":        true,
+		"createdCount":   createdCount,
+		"scansStarted":   scansStarted,
+		"failedCount":    failedCount,
+		"totalTargets":   totalTargets,
+		"processingTime": processingTime.String(),
+		"successRate":    fmt.Sprintf("%.1f", successRate),
+		"errors":         errors,
+		"message":        fmt.Sprintf("Processed %d targets: %d successful, %d failed", totalTargets, createdCount, failedCount),
 	}
 
 	json.NewEncoder(w).Encode(response)

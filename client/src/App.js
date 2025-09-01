@@ -17,6 +17,7 @@ import WelcomeModal from './modals/WelcomeModal.js';
 import GoogleDorkingModal from './modals/GoogleDorkingModal.js';
 import AcunetixConfigModal from './modals/AcunetixConfigModal.js';
 import AcunetixTargetSelectorModal from './modals/AcunetixTargetSelectorModal.js';
+import AcunetixBulkTargetModal from './modals/AcunetixBulkTargetModal.js';
 import AcunetixDashboardModal from './modals/AcunetixDashboardModal.js';
 import Ars0nFrameworkHeader from './components/ars0nFrameworkHeader.js';
 import ManageScopeTargets from './components/manageScopeTargets.js';
@@ -546,6 +547,7 @@ function App() {
   const [showAmassIntelConfigModal, setShowAmassIntelConfigModal] = useState(false);
   const [amassIntelSelectedNetworkRangesCount, setAmassIntelSelectedNetworkRangesCount] = useState(0);
   const [showDNSxConfigModal, setShowDNSxConfigModal] = useState(false);
+  const [showAcunetixBulkTargetModal, setShowAcunetixBulkTargetModal] = useState(false);
   // Removed unused DNSx wildcard targets variable - replaced with domains count below
   const [ipPortScans, setIPPortScans] = useState([]);
   const [mostRecentIPPortScan, setMostRecentIPPortScan] = useState(null);
@@ -6537,6 +6539,60 @@ function App() {
                     </Card>
                   </Col>
                 </Row>
+
+                {/* Acunetix Integration Section */}
+                <h4 className="text-secondary mb-3 fs-5">Acunetix DAST Integration</h4>
+                <HelpMeLearn section="wildcardAcunetixIntegration" />
+                <Row className="mb-4">
+                  <Col>
+                    <Card className="shadow-sm h-100 text-center" style={{ minHeight: '200px' }}>
+                      <Card.Body className="d-flex flex-column">
+                        <Card.Title className="text-danger fs-4 mb-3">
+                          <i className="fas fa-shield-alt me-2"></i>
+                          Acunetix DAST Scanner
+                        </Card.Title>
+                        <Card.Text className="text-white small fst-italic mb-4">
+                          Professional web application security scanner for comprehensive DAST (Dynamic Application Security Testing) of discovered live web servers.
+                        </Card.Text>
+                        <div className="d-flex justify-content-between mt-auto gap-2">
+                          <Button 
+                            variant="outline-danger" 
+                            className="flex-fill"
+                            onClick={() => setShowAcunetixConfigModal(true)}
+                          >
+                            <i className="fas fa-cog me-1"></i>
+                            Config
+                          </Button>
+                          <Button 
+                            variant="outline-danger" 
+                            className="flex-fill"
+                            onClick={() => setShowAcunetixTargetSelectorModal(true)}
+                            disabled={!mostRecentHttpxScan || mostRecentHttpxScan.status !== "success"}
+                          >
+                            <i className="fas fa-crosshairs me-1"></i>
+                            Select Targets
+                          </Button>
+                          <Button 
+                            variant="outline-danger" 
+                            className="flex-fill"
+                            onClick={() => setShowAcunetixBulkTargetModal(true)}
+                          >
+                            <i className="fas fa-rocket me-1"></i>
+                            Bulk Scan
+                          </Button>
+                          <Button 
+                            variant="outline-danger" 
+                            className="flex-fill"
+                            onClick={() => setShowAcunetixDashboardModal(true)}
+                          >
+                            <i className="fas fa-tachometer-alt me-1"></i>
+                            Dashboard
+                          </Button>
+                        </div>
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                </Row>
               </div>
             )}
             {activeTarget.type === 'URL' && (
@@ -7042,6 +7098,32 @@ function App() {
           </pre>
         </Modal.Body>
       </Modal>
+
+      {/* Acunetix Modals */}
+      <AcunetixConfigModal
+        show={showAcunetixConfigModal}
+        handleClose={() => setShowAcunetixConfigModal(false)}
+        activeTarget={activeTarget}
+      />
+
+      <AcunetixTargetSelectorModal
+        show={showAcunetixTargetSelectorModal}
+        handleClose={() => setShowAcunetixTargetSelectorModal(false)}
+        activeTarget={activeTarget}
+        httpxResults={mostRecentHttpxScan}
+      />
+
+      <AcunetixBulkTargetModal
+        show={showAcunetixBulkTargetModal}
+        handleClose={() => setShowAcunetixBulkTargetModal(false)}
+        activeTarget={activeTarget}
+      />
+
+      <AcunetixDashboardModal
+        show={showAcunetixDashboardModal}
+        handleClose={() => setShowAcunetixDashboardModal(false)}
+        activeTarget={activeTarget}
+      />
     </Container>
   );
 }
