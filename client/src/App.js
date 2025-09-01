@@ -6523,11 +6523,11 @@ function App() {
                         <div className="text-danger mb-4">
                           <div className="row">
                             <div className="col">
-                              <h3 className="mb-0">{consolidatedSubdomainsCount || 0}</h3>
+                              <h3 className="mb-0">{consolidatedCount || 0}</h3>
                               <small className="text-white-50">Total<br/>Subdomains</small>
                             </div>
                             <div className="col">
-                              <h3 className="mb-0">{mostRecentHttpxScan?.live_web_servers_found || 0}</h3>
+                              <h3 className="mb-0">{getHttpxResultsCount(mostRecentHttpxScan)}</h3>
                               <small className="text-white-50">Live Web<br/>Servers</small>
                             </div>
                           </div>
