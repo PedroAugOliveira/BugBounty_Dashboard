@@ -4126,6 +4126,8 @@ func loadAcunetixConfig() (struct {
 		ProfileID string `json:"profileId"`
 	}
 
+	log.Printf("[ACUNETIX CONFIG] Attempting to load config from database")
+
 	// Try to load from database first
 	query := `SELECT api_url, api_key, profile_id FROM acunetix_config LIMIT 1`
 	err := dbPool.QueryRow(context.Background(), query).Scan(&config.APIUrl, &config.APIKey, &config.ProfileID)
@@ -4133,51 +4135,48 @@ func loadAcunetixConfig() (struct {
 	if err != nil {
 		// Return default config if no database config exists
 		if err == pgx.ErrNoRows {
+			log.Printf("[ACUNETIX CONFIG] No config found in database, returning defaults")
 			config.APIUrl = "https://127.0.0.1:3443/api/v1"
 			config.ProfileID = "11111111-1111-1111-1111-111111111111"
 			return config, fmt.Errorf("no configuration found")
 		}
+		log.Printf("[ACUNETIX CONFIG] Error loading config: %v", err)
 		return config, err
 	}
 
+	log.Printf("[ACUNETIX CONFIG] Config loaded successfully - URL: %s, Profile: %s", config.APIUrl, config.ProfileID)
 	return config, nil
 }
 
 func saveAcunetixConfig(apiUrl, apiKey, profileId string) error {
-	// Create table if it doesn't exist
-	createTableQuery := `
-		CREATE TABLE IF NOT EXISTS acunetix_config (
-			id SERIAL PRIMARY KEY,
-			api_url TEXT NOT NULL,
-			api_key TEXT NOT NULL,
-			profile_id TEXT,
-			created_at TIMESTAMP DEFAULT NOW(),
-			updated_at TIMESTAMP DEFAULT NOW()
-		)
-	`
-	_, err := dbPool.Exec(context.Background(), createTableQuery)
-	if err != nil {
-		return err
-	}
+	log.Printf("[ACUNETIX CONFIG] Attempting to save config - URL: %s, Key: %s, Profile: %s", apiUrl, "***", profileId)
 
 	// Check if config exists
 	var existingId int
 	checkQuery := `SELECT id FROM acunetix_config LIMIT 1`
-	err = dbPool.QueryRow(context.Background(), checkQuery).Scan(&existingId)
+	err := dbPool.QueryRow(context.Background(), checkQuery).Scan(&existingId)
 
 	if err != nil && err != pgx.ErrNoRows {
+		log.Printf("[ACUNETIX CONFIG] Error checking existing config: %v", err)
 		return err
 	}
 
 	if err == pgx.ErrNoRows {
 		// Insert new config
+		log.Printf("[ACUNETIX CONFIG] No existing config found, inserting new one")
 		insertQuery := `
 			INSERT INTO acunetix_config (api_url, api_key, profile_id, updated_at)
 			VALUES ($1, $2, $3, NOW())
 		`
 		_, err = dbPool.Exec(context.Background(), insertQuery, apiUrl, apiKey, profileId)
+		if err != nil {
+			log.Printf("[ACUNETIX CONFIG] Error inserting config: %v", err)
+		} else {
+			log.Printf("[ACUNETIX CONFIG] Config inserted successfully")
+		}
 	} else {
 		// Update existing config
+		log.Printf("[ACUNETIX CONFIG] Updating existing config with ID: %d", existingId)
 		updateQuery := `
 			UPDATE acunetix_config SET 
 				api_url = $1,
@@ -4187,6 +4186,11 @@ func saveAcunetixConfig(apiUrl, apiKey, profileId string) error {
 			WHERE id = $4
 		`
 		_, err = dbPool.Exec(context.Background(), updateQuery, apiUrl, apiKey, profileId, existingId)
+		if err != nil {
+			log.Printf("[ACUNETIX CONFIG] Error updating config: %v", err)
+		} else {
+			log.Printf("[ACUNETIX CONFIG] Config updated successfully")
+		}
 	}
 
 	return err
@@ -4197,6 +4201,8 @@ func handleWildcardConsolidateAttackSurface(w http.ResponseWriter, r *http.Reque
 
 	vars := mux.Vars(r)
 	scopeTargetId := vars["scope_target_id"]
+
+	log.Printf("[WILDCARD CONSOLIDATION] Received request for scope target: %s", scopeTargetId)
 
 	if scopeTargetId == "" {
 		http.Error(w, "Scope target ID is required", http.StatusBadRequest)
@@ -4209,14 +4215,17 @@ func handleWildcardConsolidateAttackSurface(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("[WILDCARD CONSOLIDATION] Error decoding request: %v", err)
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 
+	log.Printf("[WILDCARD CONSOLIDATION] Request decoded - HTTPX scans: %d, Subdomains: %d", len(req.HttpxScans), len(req.ConsolidatedSubdomains))
+
 	// Call the consolidation function from utils
 	err := utils.ConsolidateAttackSurfaceWildcard(dbPool, scopeTargetId, req.HttpxScans, req.ConsolidatedSubdomains)
 	if err != nil {
-		log.Printf("Error consolidating wildcard attack surface: %v", err)
+		log.Printf("[WILDCARD CONSOLIDATION] Error consolidating wildcard attack surface: %v", err)
 		response := map[string]interface{}{
 			"success": false,
 			"message": fmt.Sprintf("Failed to consolidate attack surface: %v", err),
@@ -4224,6 +4233,8 @@ func handleWildcardConsolidateAttackSurface(w http.ResponseWriter, r *http.Reque
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+
+	log.Printf("[WILDCARD CONSOLIDATION] Successfully consolidated attack surface for scope target: %s", scopeTargetId)
 
 	response := map[string]interface{}{
 		"success": true,

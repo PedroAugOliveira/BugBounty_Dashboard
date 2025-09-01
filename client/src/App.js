@@ -170,8 +170,19 @@ import AttackSurfaceVisualizationModal from './modals/AttackSurfaceVisualization
 
 // Add helper function
 const getHttpxResultsCount = (scan) => {
-  if (!scan?.result?.String) return 0;
-  return scan.result.String.split('\n').filter(line => line.trim()).length;
+  if (!scan?.result?.String) {
+    console.log('[HTTPX COUNT] No scan or result available');
+    return 0;
+  }
+  
+  try {
+    const lines = scan.result.String.split('\n').filter(line => line.trim());
+    console.log('[HTTPX COUNT] Parsed lines:', lines.length);
+    return lines.length;
+  } catch (error) {
+    console.error('[HTTPX COUNT] Error parsing HTTPX results:', error);
+    return 0;
+  }
 };
 
 // Add helper function to get network ranges count for Amass Intel
@@ -615,6 +626,10 @@ function App() {
   // Wildcard consolidation handler
   const handleConsolidateWildcardAttackSurface = async () => {
     if (!activeTarget?.id) return;
+
+    console.log('[WILDCARD] Starting attack surface consolidation for target:', activeTarget.id);
+    console.log('[WILDCARD] HTTPX scans:', httpxScans);
+    console.log('[WILDCARD] Consolidated subdomains:', consolidatedSubdomains);
     
     setIsConsolidatingWildcardAttackSurface(true);
     try {
@@ -632,7 +647,11 @@ function App() {
         }
       );
       
+      console.log('[WILDCARD] Consolidation response status:', response.status);
+      
       if (response.ok) {
+        const result = await response.json();
+        console.log('[WILDCARD] Consolidation successful:', result);
         setToastTitle('Success');
         setToastMessage('Attack surface consolidated successfully');
         setShowToast(true);
@@ -641,10 +660,12 @@ function App() {
         fetchConsolidatedSubdomains();
         fetchHttpxScans();
       } else {
+        const errorResult = await response.json();
+        console.error('[WILDCARD] Consolidation failed:', errorResult);
         throw new Error('Failed to consolidate attack surface');
       }
     } catch (error) {
-      console.error('Error consolidating attack surface:', error);
+      console.error('[WILDCARD] Error consolidating attack surface:', error);
       setToastTitle('Error');
       setToastMessage('Failed to consolidate attack surface');
       setShowToast(true);
@@ -1312,6 +1333,7 @@ function App() {
 
   useEffect(() => {
     if (activeTarget) {
+      console.log('[APP] Active target changed, fetching data for:', activeTarget.id);
       fetchAmassScans(activeTarget, setAmassScans, setMostRecentAmassScan, setMostRecentAmassScanStatus, setDnsRecords, setSubdomains, setCloudDomains);
               fetchAmassIntelScans(activeTarget, setAmassIntelScans, setMostRecentAmassIntelScan, setMostRecentAmassIntelScanStatus, setAmassIntelNetworkRanges);
       fetchMetabigorCompanyScans(activeTarget, setMetabigorCompanyScans, setMostRecentMetabigorCompanyScan, setMostRecentMetabigorCompanyScanStatus, setMetabigorNetworkRanges);

@@ -60,14 +60,19 @@ const AcunetixTargetSelectorModal = ({ show, handleClose, activeTarget, httpxRes
       }
 
       // If no result field or empty, try to fetch from attack surface
-      console.log('Fetching live web servers from attack surface for target:', activeTarget.id);
+      console.log('[ACUNETIX TARGET SELECTOR] Fetching live web servers from attack surface for target:', activeTarget.id);
       const response = await fetch(
         `${process.env.REACT_APP_SERVER_PROTOCOL}://${process.env.REACT_APP_SERVER_IP}:${process.env.REACT_APP_SERVER_PORT}/attack-surface-assets/${activeTarget.id}`
       );
 
+      console.log('[ACUNETIX TARGET SELECTOR] Response status:', response.status);
+
       if (response.ok) {
         const data = await response.json();
+        console.log('[ACUNETIX TARGET SELECTOR] Attack surface data:', data);
+        
         const liveWebServers = (data.assets || []).filter(asset => asset.asset_type === 'live_web_server');
+        console.log('[ACUNETIX TARGET SELECTOR] Live web servers found:', liveWebServers.length);
         
         const targets = liveWebServers.map((asset, index) => ({
           id: asset.id || index,
@@ -85,10 +90,10 @@ const AcunetixTargetSelectorModal = ({ show, handleClose, activeTarget, httpxRes
           selected: false
         }));
 
-        console.log('Found live web servers from attack surface:', targets.length);
+        console.log('[ACUNETIX TARGET SELECTOR] Processed targets:', targets.length);
         setTargets(targets);
       } else {
-        console.warn('Failed to fetch attack surface assets, using empty list');
+        console.warn('[ACUNETIX TARGET SELECTOR] Failed to fetch attack surface assets, using empty list');
         setTargets([]);
       }
     } catch (error) {

@@ -28,17 +28,23 @@ const AcunetixConfigModal = ({ show, handleClose, onSaveConfig }) => {
   }, [show]);
 
   const loadSavedConfig = async () => {
+    console.log('[ACUNETIX MODAL] Loading saved config...');
     try {
       const response = await fetch(
         `${process.env.REACT_APP_SERVER_PROTOCOL}://${process.env.REACT_APP_SERVER_IP}:${process.env.REACT_APP_SERVER_PORT}/acunetix/config`
       );
       
+      console.log('[ACUNETIX MODAL] Response status:', response.status);
+      
       if (response.ok) {
         const savedConfig = await response.json();
+        console.log('[ACUNETIX MODAL] Loaded config:', savedConfig);
         setConfig(prev => ({ ...prev, ...savedConfig }));
+      } else {
+        console.error('[ACUNETIX MODAL] Failed to load config, status:', response.status);
       }
     } catch (error) {
-      console.error('Error loading Acunetix config:', error);
+      console.error('[ACUNETIX MODAL] Error loading Acunetix config:', error);
     }
   };
 
@@ -126,6 +132,8 @@ const AcunetixConfigModal = ({ show, handleClose, onSaveConfig }) => {
       return;
     }
 
+    console.log('[ACUNETIX MODAL] Saving config:', config);
+    
     try {
       const response = await fetch(
         `${process.env.REACT_APP_SERVER_PROTOCOL}://${process.env.REACT_APP_SERVER_IP}:${process.env.REACT_APP_SERVER_PORT}/acunetix/config`,
@@ -138,14 +146,20 @@ const AcunetixConfigModal = ({ show, handleClose, onSaveConfig }) => {
         }
       );
       
+      console.log('[ACUNETIX MODAL] Save response status:', response.status);
+      
       if (response.ok) {
+        const result = await response.json();
+        console.log('[ACUNETIX MODAL] Save successful:', result);
         onSaveConfig && onSaveConfig(config);
         handleClose();
       } else {
+        const errorResult = await response.json();
+        console.error('[ACUNETIX MODAL] Save failed:', errorResult);
         setTestStatus('error');
       }
     } catch (error) {
-      console.error('Error saving config:', error);
+      console.error('[ACUNETIX MODAL] Error saving config:', error);
       setTestStatus('error');
     }
   };

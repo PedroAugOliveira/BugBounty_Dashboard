@@ -1121,6 +1121,16 @@ func createTables() {
 		`CREATE INDEX IF NOT EXISTS idx_consolidated_attack_surface_relationships_child ON consolidated_attack_surface_relationships(child_asset_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_consolidated_attack_surface_dns_records_asset_id ON consolidated_attack_surface_dns_records(asset_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_consolidated_attack_surface_metadata_asset_id ON consolidated_attack_surface_metadata(asset_id);`,
+
+		// Acunetix Configuration Table
+		`CREATE TABLE IF NOT EXISTS acunetix_config (
+			id SERIAL PRIMARY KEY,
+			api_url TEXT NOT NULL,
+			api_key TEXT NOT NULL,
+			profile_id TEXT DEFAULT '11111111-1111-1111-1111-111111111111',
+			created_at TIMESTAMP DEFAULT NOW(),
+			updated_at TIMESTAMP DEFAULT NOW()
+		);`,
 	}
 
 	for _, query := range queries {

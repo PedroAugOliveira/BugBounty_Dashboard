@@ -355,6 +355,9 @@ func UpdateHttpxScanStatus(scanID, status, result, stderr, command, execTime str
 func GetHttpxScanStatus(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	scanID := vars["scanID"]
+	
+	log.Printf("[HTTPX SCAN STATUS] Request for scan ID: %s", scanID)
+	
 	if scanID == "" {
 		http.Error(w, "Scan ID is required", http.StatusBadRequest)
 		return
@@ -379,9 +382,12 @@ func GetHttpxScanStatus(w http.ResponseWriter, r *http.Request) {
 		&scan.AutoScanSessionID,
 	)
 	if err != nil {
+		log.Printf("[HTTPX SCAN STATUS] Database error: %v", err)
 		http.Error(w, "Scan not found", http.StatusNotFound)
 		return
 	}
+
+	log.Printf("[HTTPX SCAN STATUS] Found scan - Domain: %s, Status: %s, Result length: %d", scan.Domain, scan.Status, len(scan.Result.String))
 
 	json.NewEncoder(w).Encode(scan)
 }
@@ -390,6 +396,9 @@ func GetHttpxScanStatus(w http.ResponseWriter, r *http.Request) {
 func GetHttpxScansForScopeTarget(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	scopeTargetID := vars["id"]
+	
+	log.Printf("[HTTPX SCANS] Request for scope target: %s", scopeTargetID)
+	
 	if scopeTargetID == "" {
 		http.Error(w, "Scope target ID is required", http.StatusBadRequest)
 		return
@@ -399,7 +408,7 @@ func GetHttpxScansForScopeTarget(w http.ResponseWriter, r *http.Request) {
 		FROM httpx_scans WHERE scope_target_id = $1 ORDER BY created_at DESC`
 	rows, err := dbPool.Query(context.Background(), query, scopeTargetID)
 	if err != nil {
-		log.Printf("[ERROR] Failed to query httpx scans: %v", err)
+		log.Printf("[HTTPX SCANS] Database error: %v", err)
 		http.Error(w, "Failed to get scans", http.StatusInternalServerError)
 		return
 	}
@@ -457,8 +466,11 @@ func GetHttpxScansForScopeTarget(w http.ResponseWriter, r *http.Request) {
 		"scans": scans,
 		"count": len(scans),
 	}
+	
+	log.Printf("[HTTPX SCANS] Returning %d scans for scope target: %s", len(scans), scopeTargetID)
+	
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("[ERROR] Failed to encode response: %v", err)
+		log.Printf("[HTTPX SCANS] Failed to encode response: %v", err)
 	}
 }
 
@@ -770,6 +782,9 @@ func HandleConsolidateSubdomains(w http.ResponseWriter, r *http.Request) {
 func GetConsolidatedSubdomains(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	scopeTargetID := vars["id"]
+	
+	log.Printf("[CONSOLIDATED SUBDOMAINS] Request for scope target: %s", scopeTargetID)
+	
 	if scopeTargetID == "" {
 		http.Error(w, "Scope target ID is required", http.StatusBadRequest)
 		return
@@ -778,6 +793,7 @@ func GetConsolidatedSubdomains(w http.ResponseWriter, r *http.Request) {
 	query := `SELECT subdomain FROM consolidated_subdomains WHERE scope_target_id = $1 ORDER BY subdomain ASC`
 	rows, err := dbPool.Query(context.Background(), query, scopeTargetID)
 	if err != nil {
+		log.Printf("[CONSOLIDATED SUBDOMAINS] Database error: %v", err)
 		http.Error(w, "Failed to get consolidated subdomains", http.StatusInternalServerError)
 		return
 	}
@@ -791,6 +807,8 @@ func GetConsolidatedSubdomains(w http.ResponseWriter, r *http.Request) {
 		}
 		subdomains = append(subdomains, subdomain)
 	}
+
+	log.Printf("[CONSOLIDATED SUBDOMAINS] Found %d subdomains for scope target: %s", len(subdomains), scopeTargetID)
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"count":      len(subdomains),

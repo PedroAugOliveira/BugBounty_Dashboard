@@ -75,20 +75,25 @@ const NucleiConfigModal = ({
   const fetchAttackSurfaceAssets = async () => {
     if (!activeTarget?.id) return;
 
+    console.log('[NUCLEI MODAL] Fetching attack surface assets for target:', activeTarget.id);
     setLoadingAssets(true);
     try {
       const response = await fetch(
         `${process.env.REACT_APP_SERVER_PROTOCOL}://${process.env.REACT_APP_SERVER_IP}:${process.env.REACT_APP_SERVER_PORT}/attack-surface-assets/${activeTarget.id}`
       );
       
+      console.log('[NUCLEI MODAL] Response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log('[NUCLEI MODAL] Attack surface data:', data);
         setAttackSurfaceAssets(data.assets || []);
       } else {
+        console.error('[NUCLEI MODAL] Failed to load attack surface assets, status:', response.status);
         setError('Failed to load attack surface assets. Please consolidate the attack surface first.');
       }
     } catch (error) {
-      console.error('Error fetching attack surface assets:', error);
+      console.error('[NUCLEI MODAL] Error fetching attack surface assets:', error);
       setError('Failed to load attack surface assets. Please try again.');
     } finally {
       setLoadingAssets(false);

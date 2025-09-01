@@ -285,6 +285,8 @@ func GetAttackSurfaceAssetCounts(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	scopeTargetID := vars["scope_target_id"]
 
+	log.Printf("[ATTACK SURFACE COUNTS] Request for scope target: %s", scopeTargetID)
+
 	if scopeTargetID == "" {
 		http.Error(w, "scope_target_id is required", http.StatusBadRequest)
 		return
@@ -301,7 +303,7 @@ func GetAttackSurfaceAssetCounts(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := dbPool.Query(context.Background(), query, scopeTargetID)
 	if err != nil {
-		log.Printf("Error querying attack surface asset counts: %v", err)
+		log.Printf("[ATTACK SURFACE COUNTS] Database error: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -342,10 +344,12 @@ func GetAttackSurfaceAssetCounts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rows.Err(); err != nil {
-		log.Printf("Error iterating attack surface asset count rows: %v", err)
+		log.Printf("[ATTACK SURFACE COUNTS] Error iterating rows: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+
+	log.Printf("[ATTACK SURFACE COUNTS] Returning counts for scope target %s: %+v", scopeTargetID, counts)
 
 	json.NewEncoder(w).Encode(counts)
 }
@@ -3044,6 +3048,8 @@ func createComprehensiveAssetRelationships(scopeTargetID string) (int, error) {
 }
 
 func fetchConsolidatedAssets(scopeTargetID string) ([]AttackSurfaceAsset, error) {
+	log.Printf("[ATTACK SURFACE] Fetching consolidated assets for scope target: %s", scopeTargetID)
+	
 	query := `
 		SELECT 
 			id, scope_target_id, asset_type, asset_identifier, 
@@ -3108,6 +3114,7 @@ func fetchConsolidatedAssets(scopeTargetID string) ([]AttackSurfaceAsset, error)
 
 	rows, err := dbPool.Query(context.Background(), query, scopeTargetID)
 	if err != nil {
+		log.Printf("[ATTACK SURFACE] Error querying database: %v", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -3269,6 +3276,17 @@ func fetchConsolidatedAssets(scopeTargetID string) ([]AttackSurfaceAsset, error)
 		}
 
 		assets = append(assets, asset)
+	}
+
+	log.Printf("[ATTACK SURFACE] Found %d assets for scope target: %s", len(assets), scopeTargetID)
+	
+	// Log asset types for debugging
+	assetTypeCounts := make(map[string]int)
+	for _, asset := range assets {
+		assetTypeCounts[asset.AssetType]++
+	}
+	for assetType, count := range assetTypeCounts {
+		log.Printf("[ATTACK SURFACE] Asset type '%s': %d", assetType, count)
 	}
 
 	return assets, nil

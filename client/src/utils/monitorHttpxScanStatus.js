@@ -8,6 +8,7 @@ const monitorHttpxScanStatus = async (
   setMostRecentHttpxScanStatus
 ) => {
   if (!activeTarget) {
+    console.log('[HTTPX MONITOR] No active target');
     setHttpxScans([]);
     setMostRecentHttpxScan(null);
     setIsHttpxScanning(false);
@@ -15,10 +16,15 @@ const monitorHttpxScanStatus = async (
     return;
   }
 
+  console.log('[HTTPX MONITOR] Monitoring scan status for target:', activeTarget.id);
+
   try {
     const scanDetails = await fetchHttpxScans(activeTarget, setHttpxScans, setMostRecentHttpxScan, setMostRecentHttpxScanStatus);
     
+    console.log('[HTTPX MONITOR] Scan details:', scanDetails);
+    
     if (scanDetails && scanDetails.status === 'pending') {
+      console.log('[HTTPX MONITOR] Scan is pending, continuing to monitor');
       setIsHttpxScanning(true);
       setTimeout(() => {
         monitorHttpxScanStatus(
@@ -30,10 +36,11 @@ const monitorHttpxScanStatus = async (
         );
       }, 5000);
     } else {
+      console.log('[HTTPX MONITOR] Scan is not pending, stopping monitoring');
       setIsHttpxScanning(false);
     }
   } catch (error) {
-    console.error('Error monitoring httpx scan status:', error);
+    console.error('[HTTPX MONITOR] Error monitoring httpx scan status:', error);
     setHttpxScans([]);
     setMostRecentHttpxScan(null);
     setIsHttpxScanning(false);
