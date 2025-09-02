@@ -171,13 +171,11 @@ import AttackSurfaceVisualizationModal from './modals/AttackSurfaceVisualization
 // Add helper function
 const getHttpxResultsCount = (scan) => {
   if (!scan?.result?.String) {
-    console.log('[HTTPX COUNT] No scan or result available');
     return 0;
   }
   
   try {
     const lines = scan.result.String.split('\n').filter(line => line.trim());
-    console.log('[HTTPX COUNT] Parsed lines:', lines.length);
     return lines.length;
   } catch (error) {
     console.error('[HTTPX COUNT] Error parsing HTTPX results:', error);
