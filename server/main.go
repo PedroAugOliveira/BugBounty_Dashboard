@@ -4243,21 +4243,24 @@ func handleAcunetixCleanAll(w http.ResponseWriter, r *http.Request) {
 
 	// Step 2: Delete all targets (this will automatically delete scans and vulnerabilities)
 	if len(targetIds) > 0 {
+		log.Printf("[ACUNETIX CLEAN] Starting deletion of %d targets", len(targetIds))
 		success := deleteAcunetixTargets(req.APIUrl, req.APIKey, targetIds)
 		if success {
 			targetsDeleted = len(targetIds)
-			// Estimate scans deleted (rough approximation)
-			scansDeleted = len(targetIds) * 2 // Assuming average 2 scans per target
-			log.Printf("[ACUNETIX CLEAN] Successfully deleted %d targets", targetsDeleted)
+			// More conservative estimate of scans deleted
+			scansDeleted = len(targetIds) * 3 // Assuming average 3 scans per target (more realistic)
+			log.Printf("[ACUNETIX CLEAN] Successfully deleted %d targets with associated scans and vulnerabilities", targetsDeleted)
 		} else {
 			log.Printf("[ACUNETIX CLEAN] Failed to delete targets")
 			response := map[string]interface{}{
 				"success": false,
-				"message": "Failed to delete targets",
+				"message": "Failed to delete targets. Check logs for details.",
 			}
 			json.NewEncoder(w).Encode(response)
 			return
 		}
+	} else {
+		log.Printf("[ACUNETIX CLEAN] No targets found to delete")
 	}
 
 	response := map[string]interface{}{
@@ -4269,7 +4272,7 @@ func handleAcunetixCleanAll(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// Helper function to get all Acunetix target IDs
+// Helper function to get all Acunetix target IDs (with pagination support)
 func getAllAcunetixTargets(apiUrl, apiKey string) ([]string, error) {
 	client := &http.Client{
 		Transport: &http.Transport{
@@ -4278,48 +4281,82 @@ func getAllAcunetixTargets(apiUrl, apiKey string) ([]string, error) {
 		Timeout: 30 * time.Second,
 	}
 
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/targets", apiUrl), nil)
-	if err != nil {
-		return nil, err
+	var allTargetIds []string
+	cursor := ""
+	limit := 100 // Maximum limit per page
+	hasMore := true
+
+	log.Printf("[ACUNETIX CLEAN] Starting paginated fetch of all targets")
+
+	for hasMore {
+		// Build URL with pagination parameters
+		url := fmt.Sprintf("%s/targets?l=%d", apiUrl, limit)
+		if cursor != "" {
+			url = fmt.Sprintf("%s&c=%s", url, cursor)
+		}
+
+		log.Printf("[ACUNETIX CLEAN] Fetching page with cursor: %s", cursor)
+
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-Auth", apiKey)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		body, err := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode != 200 {
+			return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+		}
+
+		var result struct {
+			Targets []struct {
+				TargetID string `json:"target_id"`
+			} `json:"targets"`
+			Pagination struct {
+				Count      int    `json:"count"`
+				Cursor     string `json:"cursor_hash"`
+				Sort       string `json:"sort"`
+				NextCursor string `json:"next_cursor"`
+			} `json:"pagination"`
+		}
+
+		if err := json.Unmarshal(body, &result); err != nil {
+			return nil, err
+		}
+
+		// Add targets from current page
+		for _, target := range result.Targets {
+			allTargetIds = append(allTargetIds, target.TargetID)
+		}
+
+		log.Printf("[ACUNETIX CLEAN] Found %d targets in current page, total so far: %d", len(result.Targets), len(allTargetIds))
+
+		// Check if there are more pages
+		if result.Pagination.NextCursor != "" && len(result.Targets) == limit {
+			cursor = result.Pagination.NextCursor
+			hasMore = true
+		} else {
+			hasMore = false
+		}
 	}
 
-	req.Header.Set("X-Auth", apiKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var result struct {
-		Targets []struct {
-			TargetID string `json:"target_id"`
-		} `json:"targets"`
-	}
-
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, err
-	}
-
-	var targetIds []string
-	for _, target := range result.Targets {
-		targetIds = append(targetIds, target.TargetID)
-	}
-
-	return targetIds, nil
+	log.Printf("[ACUNETIX CLEAN] Completed paginated fetch. Total targets found: %d", len(allTargetIds))
+	return allTargetIds, nil
 }
 
-// Helper function to delete Acunetix targets
+// Helper function to delete Acunetix targets (with batch processing)
 func deleteAcunetixTargets(apiUrl, apiKey string, targetIds []string) bool {
 	if len(targetIds) == 0 {
 		return true
@@ -4329,43 +4366,70 @@ func deleteAcunetixTargets(apiUrl, apiKey string, targetIds []string) bool {
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
-		Timeout: 60 * time.Second,
+		Timeout: 120 * time.Second, // Increased timeout for large batches
 	}
 
-	requestBody := map[string][]string{
-		"target_id_list": targetIds,
+	// Process targets in batches to avoid API limits
+	batchSize := 50 // Process 50 targets at a time
+	totalBatches := (len(targetIds) + batchSize - 1) / batchSize
+
+	log.Printf("[ACUNETIX CLEAN] Processing %d targets in %d batches of %d", len(targetIds), totalBatches, batchSize)
+
+	for i := 0; i < len(targetIds); i += batchSize {
+		end := i + batchSize
+		if end > len(targetIds) {
+			end = len(targetIds)
+		}
+
+		batch := targetIds[i:end]
+		currentBatch := (i / batchSize) + 1
+
+		log.Printf("[ACUNETIX CLEAN] Processing batch %d/%d with %d targets", currentBatch, totalBatches, len(batch))
+
+		requestBody := map[string][]string{
+			"target_id_list": batch,
+		}
+
+		jsonBody, err := json.Marshal(requestBody)
+		if err != nil {
+			log.Printf("[ACUNETIX CLEAN] Error marshaling delete request for batch %d: %v", currentBatch, err)
+			return false
+		}
+
+		req, err := http.NewRequest("POST", fmt.Sprintf("%s/targets/delete", apiUrl), bytes.NewBuffer(jsonBody))
+		if err != nil {
+			log.Printf("[ACUNETIX CLEAN] Error creating delete request for batch %d: %v", currentBatch, err)
+			return false
+		}
+
+		req.Header.Set("X-Auth", apiKey)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("[ACUNETIX CLEAN] Error executing delete request for batch %d: %v", currentBatch, err)
+			return false
+		}
+
+		if resp.StatusCode == 204 {
+			log.Printf("[ACUNETIX CLEAN] Successfully deleted batch %d/%d", currentBatch, totalBatches)
+		} else {
+			body, _ := ioutil.ReadAll(resp.Body)
+			log.Printf("[ACUNETIX CLEAN] Delete failed for batch %d with status %d: %s", currentBatch, resp.StatusCode, string(body))
+			resp.Body.Close()
+			return false
+		}
+
+		resp.Body.Close()
+
+		// Small delay between batches to be gentle on the API
+		if currentBatch < totalBatches {
+			time.Sleep(1 * time.Second)
+		}
 	}
 
-	jsonBody, err := json.Marshal(requestBody)
-	if err != nil {
-		log.Printf("[ACUNETIX CLEAN] Error marshaling delete request: %v", err)
-		return false
-	}
-
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s/targets/delete", apiUrl), bytes.NewBuffer(jsonBody))
-	if err != nil {
-		log.Printf("[ACUNETIX CLEAN] Error creating delete request: %v", err)
-		return false
-	}
-
-	req.Header.Set("X-Auth", apiKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("[ACUNETIX CLEAN] Error executing delete request: %v", err)
-		return false
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 204 {
-		log.Printf("[ACUNETIX CLEAN] Successfully deleted targets")
-		return true
-	}
-
-	body, _ := ioutil.ReadAll(resp.Body)
-	log.Printf("[ACUNETIX CLEAN] Delete failed with status %d: %s", resp.StatusCode, string(body))
-	return false
+	log.Printf("[ACUNETIX CLEAN] Successfully deleted all %d targets across %d batches", len(targetIds), totalBatches)
+	return true
 }
 
 func handleWildcardConsolidateAttackSurface(w http.ResponseWriter, r *http.Request) {

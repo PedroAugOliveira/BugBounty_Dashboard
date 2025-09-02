@@ -201,9 +201,15 @@ const AcunetixConfigModal = ({ show, handleClose, onSaveConfig }) => {
     }
 
     setIsCleaning(true);
-    setCleanStatus('Iniciando limpeza...');
+    setCleanStatus('🔍 Buscando todos os targets (páginas)...');
 
     try {
+      // Add timeout for long operations
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+
+      setCleanStatus('🗑️ Processando limpeza completa...');
+
       const response = await fetch(
         `${process.env.REACT_APP_SERVER_PROTOCOL}://${process.env.REACT_APP_SERVER_IP}:${process.env.REACT_APP_SERVER_PORT}/acunetix/clean-all`,
         {
@@ -214,25 +220,34 @@ const AcunetixConfigModal = ({ show, handleClose, onSaveConfig }) => {
           body: JSON.stringify({
             apiUrl: config.apiUrl,
             apiKey: config.apiKey
-          })
+          }),
+          signal: controller.signal
         }
       );
 
+      clearTimeout(timeoutId);
       const result = await response.json();
 
       if (result.success) {
-        setCleanStatus(`✅ Limpeza concluída! Removidos: ${result.targetsDeleted} targets, ${result.scansDeleted} scans`);
+        setCleanStatus(`✅ Limpeza completa concluída! 
+📊 Removidos: ${result.targetsDeleted} targets
+🔍 Estimativa: ${result.scansDeleted} scans relacionados
+🛡️ Todas as vulnerabilidades associadas também foram removidas`);
       } else {
         setCleanStatus(`❌ Erro na limpeza: ${result.message}`);
       }
     } catch (error) {
-      console.error('[ACUNETIX MODAL] Clean error:', error);
-      setCleanStatus('❌ Erro de conexão durante a limpeza');
+      if (error.name === 'AbortError') {
+        setCleanStatus('⏱️ Timeout: Operação demorou mais que 2 minutos. Verifique o Acunetix manualmente.');
+      } else {
+        console.error('[ACUNETIX MODAL] Clean error:', error);
+        setCleanStatus('❌ Erro de conexão durante a limpeza');
+      }
     } finally {
       setIsCleaning(false);
       setTimeout(() => {
         setCleanStatus('');
-      }, 5000);
+      }, 8000); // Increased time to read the detailed status
     }
   };
 
@@ -471,7 +486,19 @@ const AcunetixConfigModal = ({ show, handleClose, onSaveConfig }) => {
       <Modal.Footer>
         <div className="w-100">
           {cleanStatus && (
-            <Alert variant={cleanStatus.includes('✅') ? 'success' : 'danger'} className="mb-3">
+            <Alert 
+              variant={cleanStatus.includes('✅') ? 'success' : cleanStatus.includes('🔍') || cleanStatus.includes('🗑️') ? 'info' : 'danger'} 
+              className="mb-3"
+              style={{ whiteSpace: 'pre-line', fontSize: '0.9rem' }}
+            >
+              {isCleaning && (
+                <div className="d-flex align-items-center mb-2">
+                  <div className="spinner-border spinner-border-sm me-2" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                  <strong>Processando...</strong>
+                </div>
+              )}
               {cleanStatus}
             </Alert>
           )}
