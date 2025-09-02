@@ -4171,9 +4171,10 @@ func saveAcunetixConfig(apiUrl, apiKey, profileId string) error {
 		_, err = dbPool.Exec(context.Background(), insertQuery, apiUrl, apiKey, profileId)
 		if err != nil {
 			log.Printf("[ACUNETIX CONFIG] Error inserting config: %v", err)
-		} else {
-			log.Printf("[ACUNETIX CONFIG] Config inserted successfully")
+			return err
 		}
+		log.Printf("[ACUNETIX CONFIG] Config inserted successfully")
+		return nil
 	} else {
 		// Update existing config
 		log.Printf("[ACUNETIX CONFIG] Updating existing config with ID: %d", existingId)
@@ -4188,12 +4189,11 @@ func saveAcunetixConfig(apiUrl, apiKey, profileId string) error {
 		_, err = dbPool.Exec(context.Background(), updateQuery, apiUrl, apiKey, profileId, existingId)
 		if err != nil {
 			log.Printf("[ACUNETIX CONFIG] Error updating config: %v", err)
-		} else {
-			log.Printf("[ACUNETIX CONFIG] Config updated successfully")
+			return err
 		}
+		log.Printf("[ACUNETIX CONFIG] Config updated successfully")
+		return nil
 	}
-
-	return err
 }
 
 func handleWildcardConsolidateAttackSurface(w http.ResponseWriter, r *http.Request) {
