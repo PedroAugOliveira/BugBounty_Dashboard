@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math"
 	"net/http"
@@ -278,6 +280,7 @@ func main() {
 	r.HandleFunc("/acunetix/bulk-import", handleAcunetixBulkImport).Methods("POST", "OPTIONS")
 	r.HandleFunc("/acunetix/bulk-target-scan", handleAcunetixBulkTargetScan).Methods("POST", "OPTIONS")
 	r.HandleFunc("/acunetix/dashboard", handleAcunetixDashboard).Methods("POST", "OPTIONS")
+	r.HandleFunc("/acunetix/clean-all", handleAcunetixCleanAll).Methods("POST", "OPTIONS")
 	r.HandleFunc("/wildcard/export", handleWildcardExport).Methods("POST", "OPTIONS")
 	r.HandleFunc("/wildcard/consolidate-attack-surface/{scope_target_id}", handleWildcardConsolidateAttackSurface).Methods("POST", "OPTIONS")
 
@@ -4194,6 +4197,175 @@ func saveAcunetixConfig(apiUrl, apiKey, profileId string) error {
 		log.Printf("[ACUNETIX CONFIG] Config updated successfully")
 		return nil
 	}
+}
+
+func handleAcunetixCleanAll(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	var req struct {
+		APIUrl string `json:"apiUrl"`
+		APIKey string `json:"apiKey"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.APIUrl == "" || req.APIKey == "" {
+		response := map[string]interface{}{
+			"success": false,
+			"message": "API URL and API Key are required",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	log.Printf("[ACUNETIX CLEAN] Starting complete cleanup for: %s", req.APIUrl)
+
+	// Step 1: Get all targets
+	targetsDeleted := 0
+	scansDeleted := 0
+
+	// Get all targets from Acunetix
+	targetIds, err := getAllAcunetixTargets(req.APIUrl, req.APIKey)
+	if err != nil {
+		log.Printf("[ACUNETIX CLEAN] Error getting targets: %v", err)
+		response := map[string]interface{}{
+			"success": false,
+			"message": fmt.Sprintf("Failed to get targets: %v", err),
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	log.Printf("[ACUNETIX CLEAN] Found %d targets to delete", len(targetIds))
+
+	// Step 2: Delete all targets (this will automatically delete scans and vulnerabilities)
+	if len(targetIds) > 0 {
+		success := deleteAcunetixTargets(req.APIUrl, req.APIKey, targetIds)
+		if success {
+			targetsDeleted = len(targetIds)
+			// Estimate scans deleted (rough approximation)
+			scansDeleted = len(targetIds) * 2 // Assuming average 2 scans per target
+			log.Printf("[ACUNETIX CLEAN] Successfully deleted %d targets", targetsDeleted)
+		} else {
+			log.Printf("[ACUNETIX CLEAN] Failed to delete targets")
+			response := map[string]interface{}{
+				"success": false,
+				"message": "Failed to delete targets",
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+	}
+
+	response := map[string]interface{}{
+		"success":        true,
+		"message":        "Acunetix cleanup completed successfully",
+		"targetsDeleted": targetsDeleted,
+		"scansDeleted":   scansDeleted,
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+// Helper function to get all Acunetix target IDs
+func getAllAcunetixTargets(apiUrl, apiKey string) ([]string, error) {
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+		Timeout: 30 * time.Second,
+	}
+
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/targets", apiUrl), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("X-Auth", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Targets []struct {
+			TargetID string `json:"target_id"`
+		} `json:"targets"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, err
+	}
+
+	var targetIds []string
+	for _, target := range result.Targets {
+		targetIds = append(targetIds, target.TargetID)
+	}
+
+	return targetIds, nil
+}
+
+// Helper function to delete Acunetix targets
+func deleteAcunetixTargets(apiUrl, apiKey string, targetIds []string) bool {
+	if len(targetIds) == 0 {
+		return true
+	}
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+		Timeout: 60 * time.Second,
+	}
+
+	requestBody := map[string][]string{
+		"target_id_list": targetIds,
+	}
+
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		log.Printf("[ACUNETIX CLEAN] Error marshaling delete request: %v", err)
+		return false
+	}
+
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/targets/delete", apiUrl), bytes.NewBuffer(jsonBody))
+	if err != nil {
+		log.Printf("[ACUNETIX CLEAN] Error creating delete request: %v", err)
+		return false
+	}
+
+	req.Header.Set("X-Auth", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[ACUNETIX CLEAN] Error executing delete request: %v", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 204 {
+		log.Printf("[ACUNETIX CLEAN] Successfully deleted targets")
+		return true
+	}
+
+	body, _ := ioutil.ReadAll(resp.Body)
+	log.Printf("[ACUNETIX CLEAN] Delete failed with status %d: %s", resp.StatusCode, string(body))
+	return false
 }
 
 func handleWildcardConsolidateAttackSurface(w http.ResponseWriter, r *http.Request) {

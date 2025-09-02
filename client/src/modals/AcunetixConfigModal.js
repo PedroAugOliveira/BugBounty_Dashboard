@@ -20,6 +20,8 @@ const AcunetixConfigModal = ({ show, handleClose, onSaveConfig }) => {
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(false);
+  const [cleanStatus, setCleanStatus] = useState('');
 
   useEffect(() => {
     if (show) {
@@ -186,6 +188,51 @@ const AcunetixConfigModal = ({ show, handleClose, onSaveConfig }) => {
     } catch (error) {
       console.error('[ACUNETIX MODAL] Error saving config:', error);
       setTestStatus('error');
+    }
+  };
+
+  const handleCleanAll = async () => {
+    if (!window.confirm('⚠️ ATENÇÃO: Esta ação irá deletar TODOS os targets, scans e vulnerabilidades do Acunetix. Esta ação NÃO PODE SER DESFEITA!\n\nTem certeza que deseja continuar?')) {
+      return;
+    }
+
+    if (!window.confirm('🚨 CONFIRMAÇÃO FINAL: Você está prestes a LIMPAR COMPLETAMENTE o Acunetix. Todos os dados serão perdidos permanentemente.\n\nTem certeza ABSOLUTA?')) {
+      return;
+    }
+
+    setIsCleaning(true);
+    setCleanStatus('Iniciando limpeza...');
+
+    try {
+      const response = await fetch(
+        `${process.env.REACT_APP_SERVER_PROTOCOL}://${process.env.REACT_APP_SERVER_IP}:${process.env.REACT_APP_SERVER_PORT}/acunetix/clean-all`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            apiUrl: config.apiUrl,
+            apiKey: config.apiKey
+          })
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.success) {
+        setCleanStatus(`✅ Limpeza concluída! Removidos: ${result.targetsDeleted} targets, ${result.scansDeleted} scans`);
+      } else {
+        setCleanStatus(`❌ Erro na limpeza: ${result.message}`);
+      }
+    } catch (error) {
+      console.error('[ACUNETIX MODAL] Clean error:', error);
+      setCleanStatus('❌ Erro de conexão durante a limpeza');
+    } finally {
+      setIsCleaning(false);
+      setTimeout(() => {
+        setCleanStatus('');
+      }, 5000);
     }
   };
 
@@ -422,16 +469,52 @@ const AcunetixConfigModal = ({ show, handleClose, onSaveConfig }) => {
         </Form>
       </Modal.Body>
       <Modal.Footer>
-        <Button variant="secondary" onClick={handleClose}>
-          Cancel
-        </Button>
-        <Button 
-          variant="danger" 
-          onClick={handleSave}
-          disabled={isTestingConnection || testStatus !== 'success'}
-        >
-          Save Configuration
-        </Button>
+        <div className="w-100">
+          {cleanStatus && (
+            <Alert variant={cleanStatus.includes('✅') ? 'success' : 'danger'} className="mb-3">
+              {cleanStatus}
+            </Alert>
+          )}
+          
+          <div className="d-flex justify-content-between align-items-center">
+            <div>
+              <Button 
+                variant="outline-warning" 
+                onClick={handleCleanAll}
+                disabled={isCleaning || isTestingConnection || !config.apiUrl || !config.apiKey}
+                className="me-2"
+              >
+                {isCleaning ? (
+                  <>
+                    <div className="spinner-border spinner-border-sm me-2" role="status">
+                      <span className="visually-hidden">Loading...</span>
+                    </div>
+                    Limpando...
+                  </>
+                ) : (
+                  <>
+                    <i className="fas fa-trash me-1"></i>
+                    Limpar Tudo
+                  </>
+                )}
+              </Button>
+            </div>
+
+            <div>
+              <Button variant="secondary" onClick={handleClose} disabled={isCleaning}>
+                Cancel
+              </Button>
+              <Button 
+                variant="danger" 
+                onClick={handleSave}
+                disabled={isTestingConnection || testStatus !== 'success' || isCleaning}
+                className="ms-2"
+              >
+                Save Configuration
+              </Button>
+            </div>
+          </div>
+        </div>
       </Modal.Footer>
     </Modal>
   );

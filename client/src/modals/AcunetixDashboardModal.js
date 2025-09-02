@@ -34,10 +34,34 @@ const AcunetixDashboardModal = ({ show, handleClose, activeTarget }) => {
       
       if (response.ok) {
         const data = await response.json();
-        setDashboardData(data);
+        // Ensure all arrays exist with fallbacks
+        setDashboardData({
+          overview: data.overview || {},
+          targets: data.targets || [],
+          scans: data.scans || [],
+          vulnerabilities: data.vulnerabilities || [],
+          reports: data.reports || []
+        });
+      } else {
+        // Reset to default state on error
+        setDashboardData({
+          overview: {},
+          targets: [],
+          scans: [],
+          vulnerabilities: [],
+          reports: []
+        });
       }
     } catch (error) {
       console.error('Error loading dashboard data:', error);
+      // Reset to default state on error
+      setDashboardData({
+        overview: {},
+        targets: [],
+        scans: [],
+        vulnerabilities: [],
+        reports: []
+      });
     } finally {
       setIsLoading(false);
     }
@@ -161,7 +185,7 @@ const AcunetixDashboardModal = ({ show, handleClose, activeTarget }) => {
         </tr>
       </thead>
       <tbody>
-        {dashboardData.targets.map(target => (
+        {dashboardData.targets?.map(target => (
           <tr key={target.target_id}>
             <td>
               <div className="d-flex align-items-center">
@@ -207,7 +231,7 @@ const AcunetixDashboardModal = ({ show, handleClose, activeTarget }) => {
         </tr>
       </thead>
       <tbody>
-        {dashboardData.scans.map(scan => (
+        {dashboardData.scans?.map(scan => (
           <tr key={scan.scan_id}>
             <td>{scan.target_address}</td>
             <td>{getScanStatusBadge(scan.current_status)}</td>
@@ -252,7 +276,7 @@ const AcunetixDashboardModal = ({ show, handleClose, activeTarget }) => {
         </tr>
       </thead>
       <tbody>
-        {dashboardData.vulnerabilities.map(vuln => (
+        {dashboardData.vulnerabilities?.map(vuln => (
           <tr key={vuln.vuln_id}>
             <td>
               <div>
@@ -292,7 +316,7 @@ const AcunetixDashboardModal = ({ show, handleClose, activeTarget }) => {
         </tr>
       </thead>
       <tbody>
-        {dashboardData.reports.map(report => (
+        {dashboardData.reports?.map(report => (
           <tr key={report.report_id}>
             <td>{report.template_name}</td>
             <td>{report.template_type}</td>
@@ -350,7 +374,7 @@ const AcunetixDashboardModal = ({ show, handleClose, activeTarget }) => {
               className={activeTab === 'targets' ? 'bg-danger' : ''}
             >
               <i className="bi bi-bullseye me-2"></i>
-              Targets ({dashboardData.targets.length})
+              Targets ({dashboardData.targets?.length || 0})
             </Nav.Link>
           </Nav.Item>
           <Nav.Item>
@@ -360,7 +384,7 @@ const AcunetixDashboardModal = ({ show, handleClose, activeTarget }) => {
               className={activeTab === 'scans' ? 'bg-danger' : ''}
             >
               <i className="bi bi-search me-2"></i>
-              Scans ({dashboardData.scans.length})
+              Scans ({dashboardData.scans?.length || 0})
             </Nav.Link>
           </Nav.Item>
           <Nav.Item>
@@ -370,7 +394,7 @@ const AcunetixDashboardModal = ({ show, handleClose, activeTarget }) => {
               className={activeTab === 'vulnerabilities' ? 'bg-danger' : ''}
             >
               <i className="bi bi-shield-exclamation me-2"></i>
-              Vulnerabilities ({dashboardData.vulnerabilities.length})
+              Vulnerabilities ({dashboardData.vulnerabilities?.length || 0})
             </Nav.Link>
           </Nav.Item>
           <Nav.Item>
@@ -380,7 +404,7 @@ const AcunetixDashboardModal = ({ show, handleClose, activeTarget }) => {
               className={activeTab === 'reports' ? 'bg-danger' : ''}
             >
               <i className="bi bi-file-earmark-text me-2"></i>
-              Reports ({dashboardData.reports.length})
+              Reports ({dashboardData.reports?.length || 0})
             </Nav.Link>
           </Nav.Item>
         </Nav>
@@ -406,7 +430,7 @@ const AcunetixDashboardModal = ({ show, handleClose, activeTarget }) => {
                     Refresh
                   </Button>
                 </div>
-                {dashboardData.targets.length > 0 ? renderTargets() : (
+                {dashboardData.targets?.length > 0 ? renderTargets() : (
                   <Alert variant="info" className="text-center">
                     <i className="bi bi-info-circle me-2"></i>
                     No targets found. Import targets from your wildcard scans.
@@ -423,7 +447,7 @@ const AcunetixDashboardModal = ({ show, handleClose, activeTarget }) => {
                     Refresh
                   </Button>
                 </div>
-                {dashboardData.scans.length > 0 ? renderScans() : (
+                {dashboardData.scans?.length > 0 ? renderScans() : (
                   <Alert variant="info" className="text-center">
                     <i className="bi bi-info-circle me-2"></i>
                     No scans found. Start scanning your imported targets.
@@ -440,7 +464,7 @@ const AcunetixDashboardModal = ({ show, handleClose, activeTarget }) => {
                     Refresh
                   </Button>
                 </div>
-                {dashboardData.vulnerabilities.length > 0 ? renderVulnerabilities() : (
+                {dashboardData.vulnerabilities?.length > 0 ? renderVulnerabilities() : (
                   <Alert variant="success" className="text-center">
                     <i className="bi bi-shield-check me-2"></i>
                     No vulnerabilities found. Keep up the good security!
@@ -463,7 +487,7 @@ const AcunetixDashboardModal = ({ show, handleClose, activeTarget }) => {
                     </Button>
                   </div>
                 </div>
-                {dashboardData.reports.length > 0 ? renderReports() : (
+                {dashboardData.reports?.length > 0 ? renderReports() : (
                   <Alert variant="info" className="text-center">
                     <i className="bi bi-info-circle me-2"></i>
                     No reports generated yet. Create reports from your scan results.
