@@ -1125,12 +1125,32 @@ func createTables() {
 		// Acunetix Configuration Table
 		`CREATE TABLE IF NOT EXISTS acunetix_config (
 			id SERIAL PRIMARY KEY,
-			api_url TEXT NOT NULL,
-			api_key TEXT NOT NULL,
+			api_url TEXT NOT NULL DEFAULT '',
+			api_key TEXT NOT NULL DEFAULT '',
 			profile_id TEXT DEFAULT '11111111-1111-1111-1111-111111111111',
 			created_at TIMESTAMP DEFAULT NOW(),
 			updated_at TIMESTAMP DEFAULT NOW()
 		);`,
+
+		// Migrate existing acunetix_config table to add missing columns
+		`DO $$ 
+		BEGIN
+			IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='acunetix_config' AND column_name='api_url') THEN
+				ALTER TABLE acunetix_config ADD COLUMN api_url TEXT NOT NULL DEFAULT '';
+			END IF;
+			IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='acunetix_config' AND column_name='api_key') THEN
+				ALTER TABLE acunetix_config ADD COLUMN api_key TEXT NOT NULL DEFAULT '';
+			END IF;
+			IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='acunetix_config' AND column_name='profile_id') THEN
+				ALTER TABLE acunetix_config ADD COLUMN profile_id TEXT DEFAULT '11111111-1111-1111-1111-111111111111';
+			END IF;
+			IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='acunetix_config' AND column_name='created_at') THEN
+				ALTER TABLE acunetix_config ADD COLUMN created_at TIMESTAMP DEFAULT NOW();
+			END IF;
+			IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='acunetix_config' AND column_name='updated_at') THEN
+				ALTER TABLE acunetix_config ADD COLUMN updated_at TIMESTAMP DEFAULT NOW();
+			END IF;
+		END $$;`,
 	}
 
 	for _, query := range queries {
