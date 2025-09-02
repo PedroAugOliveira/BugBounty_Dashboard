@@ -95,7 +95,6 @@ import monitorMetaDataScanStatus, { monitorCompanyMetaDataScanStatus } from './u
 import MetaDataModal from './modals/MetaDataModal.js';
 import fetchHttpxScans from './utils/fetchHttpxScans';
 import ROIReport from './components/ROIReport';
-import HelpMeLearn from './components/HelpMeLearn';
 import {
   AUTO_SCAN_STEPS,
   resumeAutoScan as resumeAutoScanUtil,
@@ -4918,7 +4917,7 @@ function App() {
               <div className="mb-4">
                 <h3 className="text-danger mb-3">Company</h3>
                 <h4 className="text-secondary mb-3 fs-5">ASN (On-Prem) Network Ranges</h4>
-                <HelpMeLearn section="companyNetworkRanges" />
+
                 <Row className="mb-4">
                   {[
                     {
@@ -5012,7 +5011,7 @@ function App() {
                 </Row>
                 
                 <h4 className="text-secondary mb-3 fs-5">Discover Live Web Servers (On-Prem)</h4>
-                <HelpMeLearn section="companyLiveWebServers" />
+
                 <Row className="mb-4">
                   <Col>
                     <Card className="shadow-sm h-100 text-center" style={{ minHeight: '200px' }}>
@@ -5099,7 +5098,7 @@ function App() {
                   </Col>
                 </Row>
                 <h4 className="text-secondary mb-3 fs-5">Root Domain Discovery (No API Key)</h4>
-                <HelpMeLearn section="companyRootDomainDiscovery" />
+
                 <Row className="row-cols-3 g-3 mb-4">
                   {[
                     { 
@@ -5237,7 +5236,7 @@ function App() {
                     Configure API Keys
                   </Button>
                 </div>
-                <HelpMeLearn section="companyRootDomainDiscoveryAPI" />
+
                 <Row className="row-cols-4 g-3 mb-4">
                   {[
                     { 
@@ -5402,7 +5401,7 @@ function App() {
                 </Row>
                 
                 <h4 className="text-secondary mb-3 fs-5">Consolidate Root Domains</h4>
-                <HelpMeLearn section="companyConsolidateRootDomains" />
+
                 <Row className="mb-4">
                   <Col>
                     <Card className="shadow-sm h-100 text-center" style={{ minHeight: '200px' }}>
@@ -5493,7 +5492,7 @@ function App() {
                 </Row>
                 
                 <h4 className="text-secondary mb-3 fs-5">Cloud Asset Enumeration (DNS)</h4>
-                <HelpMeLearn section="companySubdomainEnumeration" />
+
                 <Row className="row-cols-2 g-3 mb-4">
                   <Col>
                     <Card className="shadow-sm h-100 text-center" style={{ minHeight: '300px' }}>
@@ -5600,7 +5599,7 @@ function App() {
                 </Row>
 
                 <h4 className="text-secondary mb-3 fs-5">Cloud Asset Enumeration (Brute-Force & Crawl)</h4>
-                <HelpMeLearn section="companyBruteForceCrawl" />
+
                 <Row className="row-cols-2 g-3 mb-4">
                   <Col>
                     <Card className="shadow-sm h-100 text-center" style={{ minHeight: '300px' }}>
@@ -5723,7 +5722,7 @@ function App() {
                 </Row>
 
                 <h4 className="text-secondary mb-3 fs-5">{activeTarget.scope_target}'s Full Attack Surface</h4>
-                <HelpMeLearn section="companyDecisionPoint" />
+
                 <Row className="mb-4">
                   <Col>
                   <Card className="shadow-sm h-100 text-center" style={{ minHeight: '200px' }}>
@@ -5782,7 +5781,7 @@ function App() {
                 </Row>
 
                 <h4 className="text-secondary mb-3 fs-5">Nuclei Scanning</h4>
-                <HelpMeLearn section="companyNucleiScanning" />
+
                 <Row className="mb-4">
                   <Col>
                   <Card className="shadow-sm h-100 text-center" style={{ minHeight: '200px' }}>
@@ -5845,7 +5844,7 @@ function App() {
             {activeTarget.type === 'Wildcard' && (
               <div className="mb-4">
                 <h3 className="text-danger mb-3">Wildcard</h3>
-                <HelpMeLearn section="amass" />
+
                 <Row className="mb-4">
                   <Col>
                     <Card className="shadow-sm" style={{ minHeight: '250px' }}>
@@ -5901,7 +5900,7 @@ function App() {
                   </Col>
                 </Row>
                 <h4 className="text-secondary mb-3 fs-5">Subdomain Scraping</h4>
-                <HelpMeLearn section="subdomainScraping" />
+
                 <Row className="row-cols-5 g-3 mb-4">
                   {[
                     { name: 'Sublist3r', 
@@ -6025,7 +6024,7 @@ function App() {
                   ))}
                 </Row>
                 <h4 className="text-secondary mb-3 fs-5">Consolidate Subdomains & Discover Live Web Servers - Round 1</h4>
-                <HelpMeLearn section="consolidationRound1" />
+
                 <Row className="mb-4">
                   <Col>
                     <Card className="shadow-sm h-100 text-center" style={{ minHeight: '200px' }}>
@@ -6086,7 +6085,7 @@ function App() {
                   </Col>
                 </Row>
                 <h4 className="text-secondary mb-3 fs-5">Brute-Force</h4>
-                <HelpMeLearn section="bruteForce" />
+
                 <Row className="justify-content-between mb-4">
                   {[
                     { 
@@ -6158,7 +6157,7 @@ function App() {
                   ))}
                 </Row>
                 <h4 className="text-secondary mb-3 fs-5">Consolidate Subdomains & Discover Live Web Servers - Round 2</h4>
-                <HelpMeLearn section="consolidationRound2" />
+
                 <Row className="mb-4">
                   <Col>
                     <Card className="shadow-sm h-100 text-center" style={{ minHeight: '200px' }}>
@@ -6219,7 +6218,7 @@ function App() {
                   </Col>
                 </Row>
                 <h4 className="text-secondary mb-3 fs-5">JavaScript/Link Discovery</h4>
-                <HelpMeLearn section="javascriptDiscovery" />
+
                 <Row className="justify-content-between mb-4">
                   {[
                     { 
@@ -6289,7 +6288,7 @@ function App() {
                   ))}
                 </Row>
                 <h4 className="text-secondary mb-3 fs-5">Consolidate Subdomains & Discover Live Web Servers - Round 3</h4>
-                <HelpMeLearn section="consolidationRound3" />
+
                 <Row className="mb-4">
                   <Col>
                     <Card className="shadow-sm h-100 text-center" style={{ minHeight: '200px' }}>
@@ -6352,7 +6351,7 @@ function App() {
 
                 {/* Nuclei Vulnerability Scanning Section */}
                 <h4 className="text-secondary mb-3 fs-5">Nuclei Vulnerability Scanning</h4>
-                <HelpMeLearn section="wildcardNucleiVulnerabilityScanning" />
+
                 <Row className="mb-4">
                   <Col>
                     <Card className="shadow-sm" style={{ minHeight: '300px' }}>
@@ -6415,10 +6414,62 @@ function App() {
                   </Col>
                 </Row>
 
+                {/* Acunetix Integration Section */}
+                <h4 className="text-secondary mb-3 fs-5">Acunetix DAST Integration</h4>
 
+                <Row className="mb-4">
+                  <Col>
+                    <Card className="shadow-sm h-100 text-center" style={{ minHeight: '200px' }}>
+                      <Card.Body className="d-flex flex-column">
+                        <Card.Title className="text-danger fs-4 mb-3">
+                          <i className="fas fa-shield-alt me-2"></i>
+                          Acunetix DAST Scanner
+                        </Card.Title>
+                        <Card.Text className="text-white small fst-italic mb-4">
+                          Professional web application security scanner for comprehensive DAST (Dynamic Application Security Testing) of discovered live web servers.
+                        </Card.Text>
+                        <div className="d-flex justify-content-between mt-auto gap-2">
+                          <Button 
+                            variant="outline-danger" 
+                            className="flex-fill"
+                            onClick={() => setShowAcunetixConfigModal(true)}
+                          >
+                            <i className="fas fa-cog me-1"></i>
+                            Config
+                          </Button>
+                          <Button 
+                            variant="outline-danger" 
+                            className="flex-fill"
+                            onClick={() => setShowAcunetixTargetSelectorModal(true)}
+                            disabled={!mostRecentHttpxScan || mostRecentHttpxScan.status !== "success"}
+                          >
+                            <i className="fas fa-crosshairs me-1"></i>
+                            Select Targets
+                          </Button>
+                          <Button 
+                            variant="outline-danger" 
+                            className="flex-fill"
+                            onClick={() => setShowAcunetixBulkTargetModal(true)}
+                          >
+                            <i className="fas fa-rocket me-1"></i>
+                            Bulk Scan
+                          </Button>
+                          <Button 
+                            variant="outline-danger" 
+                            className="flex-fill"
+                            onClick={() => setShowAcunetixDashboardModal(true)}
+                          >
+                            <i className="fas fa-tachometer-alt me-1"></i>
+                            Dashboard
+                          </Button>
+                        </div>
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                </Row>
 
                 <h4 className="text-secondary mb-3 fs-3 text-center">DECISION POINT</h4>
-                <HelpMeLearn section="decisionPoint" />
+
                 <Row className="mb-4">
                   <Col>
                     <Card className="shadow-sm" style={{ minHeight: '250px' }}>
@@ -6528,7 +6579,7 @@ function App() {
 
                 {/* Attack Surface Consolidation */}
                 <h4 className="text-secondary mb-3 fs-5">Attack Surface Summary</h4>
-                <HelpMeLearn section="wildcardAttackSurfaceSummary" />
+
                 <Row className="mb-4">
                   <Col>
                     <Card className="shadow-sm h-100 text-center" style={{ minHeight: '200px' }}>
@@ -6572,60 +6623,6 @@ function App() {
                           >
                             <i className="fas fa-search me-1"></i>
                             Explore
-                          </Button>
-                        </div>
-                      </Card.Body>
-                    </Card>
-                  </Col>
-                </Row>
-
-                {/* Acunetix Integration Section */}
-                <h4 className="text-secondary mb-3 fs-5">Acunetix DAST Integration</h4>
-                <HelpMeLearn section="wildcardAcunetixIntegration" />
-                <Row className="mb-4">
-                  <Col>
-                    <Card className="shadow-sm h-100 text-center" style={{ minHeight: '200px' }}>
-                      <Card.Body className="d-flex flex-column">
-                        <Card.Title className="text-danger fs-4 mb-3">
-                          <i className="fas fa-shield-alt me-2"></i>
-                          Acunetix DAST Scanner
-                        </Card.Title>
-                        <Card.Text className="text-white small fst-italic mb-4">
-                          Professional web application security scanner for comprehensive DAST (Dynamic Application Security Testing) of discovered live web servers.
-                        </Card.Text>
-                        <div className="d-flex justify-content-between mt-auto gap-2">
-                          <Button 
-                            variant="outline-danger" 
-                            className="flex-fill"
-                            onClick={() => setShowAcunetixConfigModal(true)}
-                          >
-                            <i className="fas fa-cog me-1"></i>
-                            Config
-                          </Button>
-                          <Button 
-                            variant="outline-danger" 
-                            className="flex-fill"
-                            onClick={() => setShowAcunetixTargetSelectorModal(true)}
-                            disabled={!mostRecentHttpxScan || mostRecentHttpxScan.status !== "success"}
-                          >
-                            <i className="fas fa-crosshairs me-1"></i>
-                            Select Targets
-                          </Button>
-                          <Button 
-                            variant="outline-danger" 
-                            className="flex-fill"
-                            onClick={() => setShowAcunetixBulkTargetModal(true)}
-                          >
-                            <i className="fas fa-rocket me-1"></i>
-                            Bulk Scan
-                          </Button>
-                          <Button 
-                            variant="outline-danger" 
-                            className="flex-fill"
-                            onClick={() => setShowAcunetixDashboardModal(true)}
-                          >
-                            <i className="fas fa-tachometer-alt me-1"></i>
-                            Dashboard
                           </Button>
                         </div>
                       </Card.Body>
