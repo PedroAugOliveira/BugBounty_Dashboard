@@ -23,7 +23,14 @@ const AcunetixConfigModal = ({ show, handleClose, onSaveConfig }) => {
 
   useEffect(() => {
     if (show) {
+      console.log('[ACUNETIX MODAL] Modal opened, loading saved config...');
       loadSavedConfig();
+    } else {
+      console.log('[ACUNETIX MODAL] Modal closed, resetting state...');
+      // Reset state when modal is closed
+      setTestStatus('');
+      setValidationErrors({});
+      setShowAdvanced(false);
     }
   }, [show]);
 
@@ -39,9 +46,27 @@ const AcunetixConfigModal = ({ show, handleClose, onSaveConfig }) => {
       if (response.ok) {
         const savedConfig = await response.json();
         console.log('[ACUNETIX MODAL] Loaded config:', savedConfig);
-        setConfig(prev => ({ ...prev, ...savedConfig }));
+        
+        // Update config state with saved values
+        setConfig(prev => ({
+          ...prev,
+          apiUrl: savedConfig.apiUrl || prev.apiUrl,
+          apiKey: savedConfig.apiKey || prev.apiKey,
+          profileId: savedConfig.profileId || prev.profileId,
+          enableGrouping: savedConfig.enableGrouping !== undefined ? savedConfig.enableGrouping : prev.enableGrouping,
+          maxConcurrentScans: savedConfig.maxConcurrentScans || prev.maxConcurrentScans,
+          retryAttempts: savedConfig.retryAttempts || prev.retryAttempts,
+          requestTimeout: savedConfig.requestTimeout || prev.requestTimeout,
+          maxScanDuration: savedConfig.maxScanDuration || prev.maxScanDuration,
+          enableWebhook: savedConfig.enableWebhook !== undefined ? savedConfig.enableWebhook : prev.enableWebhook,
+          webhookUrl: savedConfig.webhookUrl || prev.webhookUrl,
+          scanPriority: savedConfig.scanPriority || prev.scanPriority
+        }));
+        
+        console.log('[ACUNETIX MODAL] Config state updated successfully');
       } else {
-        console.error('[ACUNETIX MODAL] Failed to load config, status:', response.status);
+        const errorText = await response.text();
+        console.error('[ACUNETIX MODAL] Failed to load config, status:', response.status, 'Error:', errorText);
       }
     } catch (error) {
       console.error('[ACUNETIX MODAL] Error loading Acunetix config:', error);

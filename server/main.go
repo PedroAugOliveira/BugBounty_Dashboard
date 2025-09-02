@@ -3461,6 +3461,7 @@ func handleAcunetixConfig(w http.ResponseWriter, r *http.Request) {
 		config, err := loadAcunetixConfig()
 		if err != nil {
 			// Return default config if not saved yet
+			log.Printf("[ACUNETIX CONFIG] No saved config found, returning defaults")
 			defaultConfig := AcunetixConfig{
 				APIUrl:             "https://127.0.0.1:3443/api/v1",
 				ProfileID:          "11111111-1111-1111-1111-111111111111",
@@ -3475,19 +3476,8 @@ func handleAcunetixConfig(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(defaultConfig)
 		} else {
 			// Return the saved config
-			responseConfig := AcunetixConfig{
-				APIUrl:             config.APIUrl,
-				APIKey:             config.APIKey,
-				ProfileID:          config.ProfileID,
-				EnableGrouping:     true,
-				MaxConcurrentScans: 3,
-				RetryAttempts:      3,
-				RequestTimeout:     30,
-				MaxScanDuration:    24,
-				EnableWebhook:      false,
-				ScanPriority:       "normal",
-			}
-			json.NewEncoder(w).Encode(responseConfig)
+			log.Printf("[ACUNETIX CONFIG] Returning saved config - URL: %s, Profile: %s", config.APIUrl, config.ProfileID)
+			json.NewEncoder(w).Encode(config)
 		}
 
 	case "POST":
@@ -3588,7 +3578,9 @@ func handleAcunetixImportTargets(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(response)
 			return
 		}
-		config = savedConfig
+		config.APIUrl = savedConfig.APIUrl
+		config.APIKey = savedConfig.APIKey
+		config.ProfileID = savedConfig.ProfileID
 	}
 
 	importedCount := 0
@@ -4115,16 +4107,8 @@ func getAcunetixDashboardData(apiUrl, apiKey string) (map[string]interface{}, er
 	return dashboardData, nil
 }
 
-func loadAcunetixConfig() (struct {
-	APIUrl    string `json:"apiUrl"`
-	APIKey    string `json:"apiKey"`
-	ProfileID string `json:"profileId"`
-}, error) {
-	var config struct {
-		APIUrl    string `json:"apiUrl"`
-		APIKey    string `json:"apiKey"`
-		ProfileID string `json:"profileId"`
-	}
+func loadAcunetixConfig() (AcunetixConfig, error) {
+	var config AcunetixConfig
 
 	log.Printf("[ACUNETIX CONFIG] Attempting to load config from database")
 
@@ -4138,11 +4122,27 @@ func loadAcunetixConfig() (struct {
 			log.Printf("[ACUNETIX CONFIG] No config found in database, returning defaults")
 			config.APIUrl = "https://127.0.0.1:3443/api/v1"
 			config.ProfileID = "11111111-1111-1111-1111-111111111111"
+			config.EnableGrouping = true
+			config.MaxConcurrentScans = 3
+			config.RetryAttempts = 3
+			config.RequestTimeout = 30
+			config.MaxScanDuration = 24
+			config.EnableWebhook = false
+			config.ScanPriority = "normal"
 			return config, fmt.Errorf("no configuration found")
 		}
 		log.Printf("[ACUNETIX CONFIG] Error loading config: %v", err)
 		return config, err
 	}
+
+	// Set default values for fields not stored in database
+	config.EnableGrouping = true
+	config.MaxConcurrentScans = 3
+	config.RetryAttempts = 3
+	config.RequestTimeout = 30
+	config.MaxScanDuration = 24
+	config.EnableWebhook = false
+	config.ScanPriority = "normal"
 
 	log.Printf("[ACUNETIX CONFIG] Config loaded successfully - URL: %s, Profile: %s", config.APIUrl, config.ProfileID)
 	return config, nil

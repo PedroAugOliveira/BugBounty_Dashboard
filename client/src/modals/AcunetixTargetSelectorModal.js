@@ -26,9 +26,19 @@ const AcunetixTargetSelectorModal = ({ show, handleClose, activeTarget, httpxRes
     }
     
     try {
+      console.log('[ACUNETIX TARGET SELECTOR] HttpxResults data:', httpxResults);
+      console.log('[ACUNETIX TARGET SELECTOR] Result field type:', typeof httpxResults?.result, 'value:', httpxResults?.result);
+      
       // First try to parse from the result field for backward compatibility
-      if (httpxResults?.result) {
-        const lines = httpxResults.result.split('\n').filter(line => line.trim());
+      let resultData = httpxResults?.result;
+      
+      // Handle sql.NullString structure if present
+      if (resultData && typeof resultData === 'object' && resultData.String) {
+        resultData = resultData.String;
+      }
+      
+      if (resultData && typeof resultData === 'string' && resultData.trim()) {
+        const lines = resultData.split('\n').filter(line => line.trim());
         const parsedTargets = lines.map((line, index) => {
           try {
             const data = JSON.parse(line);
